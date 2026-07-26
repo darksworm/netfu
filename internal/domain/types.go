@@ -35,6 +35,9 @@ type Connection struct {
 	ID   string
 	Name string
 	Type string
+	// LastUsedUnix is NM's connection.timestamp: seconds since epoch of the
+	// last successful activation, 0 for never.
+	LastUsedUnix int64
 }
 
 type ActiveConnection struct {

@@ -57,8 +57,8 @@ func TestApp_NumberKeysAndBracketsSwitchTabs(t *testing.T) {
 	if p.app().tab != tabConnections {
 		t.Errorf("3 should open the Connections tab, got tab %d", p.app().tab)
 	}
-	if view := p.view(); !strings.Contains(view, "coming soon") {
-		t.Errorf("Connections tab should show its placeholder, got:\n%s", view)
+	if view := p.view(); !strings.Contains(view, "Our House 1") {
+		t.Errorf("Connections tab should list the saved profiles, got:\n%s", view)
 	}
 
 	p.send(keyPress(']'))

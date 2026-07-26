@@ -104,6 +104,100 @@ func (w Wifi) FullHelp() [][]key.Binding {
 	return append(w.List.FullHelp(), []key.Binding{w.Connect, w.Filter, w.ClearFilter})
 }
 
+// Connections is the Connections tab keymap: list navigation plus
+// profile actions.
+type Connections struct {
+	List
+	Edit       key.Binding
+	Delete     key.Binding
+	New        key.Binding
+	Activate   key.Binding
+	Deactivate key.Binding
+}
+
+func DefaultConnections() Connections {
+	return Connections{
+		List: DefaultList(),
+		Edit: key.NewBinding(
+			key.WithKeys("e", "enter"),
+			key.WithHelp("e/↵", "edit"),
+		),
+		Delete: key.NewBinding(
+			key.WithKeys("x"),
+			key.WithHelp("x", "delete"),
+		),
+		New: key.NewBinding(
+			key.WithKeys("n"),
+			key.WithHelp("n", "new"),
+		),
+		Activate: key.NewBinding(
+			key.WithKeys("a"),
+			key.WithHelp("a", "activate"),
+		),
+		Deactivate: key.NewBinding(
+			key.WithKeys("d"),
+			key.WithHelp("d", "deactivate"),
+		),
+	}
+}
+
+func (c Connections) ShortHelp() []key.Binding {
+	return append(c.List.ShortHelp(), c.Edit, c.New)
+}
+
+func (c Connections) FullHelp() [][]key.Binding {
+	return append(c.List.FullHelp(),
+		[]key.Binding{c.Edit, c.Delete, c.New, c.Activate, c.Deactivate})
+}
+
+// Editor is the connection editor keymap: NAV-mode field navigation and
+// form actions.
+type Editor struct {
+	Up        key.Binding
+	Down      key.Binding
+	EditField key.Binding
+	Cycle     key.Binding
+	Save      key.Binding
+	Back      key.Binding
+}
+
+func DefaultEditor() Editor {
+	return Editor{
+		Up: key.NewBinding(
+			key.WithKeys("k", "up"),
+			key.WithHelp("↑/k", "prev field"),
+		),
+		Down: key.NewBinding(
+			key.WithKeys("j", "down"),
+			key.WithHelp("↓/j", "next field"),
+		),
+		EditField: key.NewBinding(
+			key.WithKeys("enter", "i"),
+			key.WithHelp("↵/i", "edit field"),
+		),
+		Cycle: key.NewBinding(
+			key.WithKeys("space"),
+			key.WithHelp("␣", "cycle"),
+		),
+		Save: key.NewBinding(
+			key.WithKeys("s"),
+			key.WithHelp("s", "save"),
+		),
+		Back: key.NewBinding(
+			key.WithKeys("esc", "q"),
+			key.WithHelp("esc", "back"),
+		),
+	}
+}
+
+func (e Editor) ShortHelp() []key.Binding {
+	return []key.Binding{e.Down, e.EditField, e.Save, e.Back}
+}
+
+func (e Editor) FullHelp() [][]key.Binding {
+	return [][]key.Binding{{e.Up, e.Down, e.EditField, e.Cycle, e.Save, e.Back}}
+}
+
 type Global struct {
 	Help    key.Binding
 	Quit    key.Binding

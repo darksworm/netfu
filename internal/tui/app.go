@@ -13,6 +13,7 @@ import (
 	"github.com/ilmars/netfu/internal/domain"
 	"github.com/ilmars/netfu/internal/tui/components/statusbar"
 	"github.com/ilmars/netfu/internal/tui/keys"
+	"github.com/ilmars/netfu/internal/tui/screens/connections"
 	"github.com/ilmars/netfu/internal/tui/screens/devices"
 	"github.com/ilmars/netfu/internal/tui/screens/wifi"
 	"github.com/ilmars/netfu/internal/tui/style"
@@ -36,6 +37,7 @@ type App struct {
 	tab      tab
 	wifi     wifi.Model
 	devices  devices.Model
+	conns    connections.Model
 	help     help.Model
 	showHelp bool
 	theme    style.Theme
@@ -52,6 +54,7 @@ func New(b backend.Backend) tea.Model {
 		tab:     tabWifi,
 		wifi:    wifi.New(b),
 		devices: devices.New(b),
+		conns:   connections.New(b),
 		help:    help.New(),
 		status:  statusbar.New(),
 	}
@@ -91,10 +94,11 @@ func (a App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// last; screens get the rest. The status line only appears while it
 		// has a message.
 		content := tea.WindowSizeMsg{Width: msg.Width, Height: max(msg.Height-3, 0)}
-		var wifiCmd, devicesCmd tea.Cmd
+		var wifiCmd, devicesCmd, connsCmd tea.Cmd
 		a.wifi, wifiCmd = a.wifi.Update(content)
 		a.devices, devicesCmd = a.devices.Update(content)
-		return a, tea.Batch(wifiCmd, devicesCmd)
+		a.conns, connsCmd = a.conns.Update(content)
+		return a, tea.Batch(wifiCmd, devicesCmd, connsCmd)
 	case tea.BackgroundColorMsg:
 		a.theme = style.NewTheme(msg.IsDark())
 		a.help.Styles = help.DefaultStyles(msg.IsDark())
@@ -104,6 +108,7 @@ func (a App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return a, nil
 	case permissionsMsg:
 		a.perms = msg.perms
+		a.conns = a.conns.SetPermissions(msg.perms)
 		return a, nil
 	case backendEventMsg:
 		var cmd tea.Cmd
@@ -124,6 +129,9 @@ func (a App) handleKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	// A screen capturing text input (the wifi filter) gets every key;
 	// global and tab bindings would otherwise swallow the typed query.
 	if a.tab == tabWifi && a.wifi.CapturesInput() {
+		return a.updateActiveScreen(msg)
+	}
+	if a.tab == tabConnections && a.conns.CapturesInput() {
 		return a.updateActiveScreen(msg)
 	}
 	switch {
@@ -152,6 +160,8 @@ func (a App) switchTab(t tab) (tea.Model, tea.Cmd) {
 		return a, a.wifi.Init()
 	case tabDevices:
 		return a, a.devices.Init()
+	case tabConnections:
+		return a, a.conns.Init()
 	}
 	return a, nil
 }
@@ -164,6 +174,9 @@ func (a App) updateActiveScreen(msg tea.Msg) (tea.Model, tea.Cmd) {
 		a.status = a.status.SetMessage(a.wifi.Status())
 	case tabDevices:
 		a.devices, cmd = a.devices.Update(msg)
+	case tabConnections:
+		a.conns, cmd = a.conns.Update(msg)
+		a.status = a.status.SetMessage(a.conns.Status())
 	}
 	return a, cmd
 }
@@ -183,6 +196,8 @@ func (a App) activeScreenView() string {
 		return a.wifi.View()
 	case tabDevices:
 		return a.devices.View()
+	case tabConnections:
+		return a.conns.View()
 	}
 	return placeholderView(tabLabels[a.tab])
 }
@@ -197,6 +212,8 @@ func (a App) activeScreenKeys() help.KeyMap {
 		return a.wifi.Keys()
 	case tabDevices:
 		return a.devices.Keys()
+	case tabConnections:
+		return a.conns.Keys()
 	}
 	return keys.List{}
 }
