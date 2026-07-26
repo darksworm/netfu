@@ -11,6 +11,7 @@ import (
 
 var (
 	Title    = lipgloss.NewStyle().Bold(true)
+	Logo     = lipgloss.NewStyle().Italic(true)
 	Selected = lipgloss.NewStyle().Reverse(true)
 	Faint    = lipgloss.NewStyle().Faint(true)
 )
@@ -20,6 +21,8 @@ var (
 func SelectedRow(row string, width int) string {
 	s := Selected
 	if width > 0 {
+		// Truncate first: Width pads short rows but wraps long ones.
+		row = lipgloss.NewStyle().MaxWidth(width).Render(row)
 		s = s.Width(width)
 	}
 	return s.Render(row)

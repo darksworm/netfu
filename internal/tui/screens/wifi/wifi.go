@@ -634,10 +634,17 @@ func (m Model) View() string {
 		lines = append(lines, row)
 	}
 	if len(list.OutOfRange) > 0 {
-		lines = append(lines, "", "─ out of range ─")
+		section := []string{"─ out of range ─"}
 		for _, ssid := range list.OutOfRange {
-			lines = append(lines, fmt.Sprintf("  %-24s ⋆ saved", ssid))
+			section = append(section, fmt.Sprintf("  %-24s ⋆ saved", ssid))
 		}
+		// Bottom-align the section in the pane; at least one blank line
+		// keeps it separated when the pane is crowded.
+		for len(lines)+len(section)+1 < m.height {
+			lines = append(lines, "")
+		}
+		lines = append(lines, "")
+		lines = append(lines, section...)
 	}
 	if len(lines) == 0 {
 		return ""

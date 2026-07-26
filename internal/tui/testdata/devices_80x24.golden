@@ -1,24 +1,10 @@
-netfu
+                                                                           netfu
 [1] Wi-Fi · [2] Devices · [3] Connections · [4] System   scan ⟳
-Devices
-▸ wlan0  wifi  connected  Our House 1                                           
-  enp0s31f6  ethernet  unavailable  
-  docker0  bridge  connected  docker0
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
+╭──────────────────────────────────────────────────────────────────────────────╮
+│ Devices                                                                      │
+│ ▸ wlan0  wifi  connected  Our House 1                                        │
+│   enp0s31f6  ethernet  unavailable                                           │
+│   docker0  bridge  connected  docker0                                        │
+╰──────────────────────────────────────────────────────────────────────────────╯
 
 ↑/k up • ↓/j down • ↵ activate/deactivate • / filter • ? help • q quit

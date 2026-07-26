@@ -103,7 +103,9 @@ func (a App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// Header and tab bar take the first two lines and the help footer the
 		// last; screens get the rest. The status line only appears while it
 		// has a message.
-		content := tea.WindowSizeMsg{Width: msg.Width, Height: max(msg.Height-chromeLines, 0)}
+		// Screens get the box interior: borders plus one cell of padding
+		// on each side.
+		content := tea.WindowSizeMsg{Width: max(msg.Width-4, 0), Height: max(msg.Height-chromeLines, 0)}
 		var wifiCmd, devicesCmd, connsCmd, systemCmd tea.Cmd
 		a.wifi, wifiCmd = a.wifi.Update(content)
 		a.devices, devicesCmd = a.devices.Update(content)
@@ -253,8 +255,8 @@ const (
 	minWidth  = 60
 	minHeight = 16
 	// chromeLines is what the shell keeps for itself: header, tab bar,
-	// reserved status line and help footer.
-	chromeLines = 4
+	// reserved status line, help footer, and the content box borders.
+	chromeLines = 6
 )
 
 // padToHeight fills the content pane with blank lines so the status line
@@ -279,6 +281,7 @@ func (a App) View() tea.View {
 	if a.height > 0 {
 		content = padToHeight(content, a.height-chromeLines)
 	}
+	content = a.boxed(content)
 	// The status line is always reserved so async feedback never shifts
 	// the content above it.
 	sections := []string{a.headerView(), a.tabBarView(), content,
@@ -291,6 +294,20 @@ func (a App) View() tea.View {
 	view := tea.NewView(base)
 	view.AltScreen = true
 	return view
+}
+
+// boxed frames the content pane; the borders account for two of the
+// chromeLines rows and two columns of the pane width. Width includes the
+// frame in lipgloss v2, so the box spans the full terminal width.
+func (a App) boxed(content string) string {
+	box := lipgloss.NewStyle().Border(lipgloss.RoundedBorder()).Padding(0, 1)
+	if a.width > 0 {
+		box = box.Width(a.width)
+	}
+	if a.theme.Dim != nil {
+		box = box.BorderForeground(a.theme.Dim)
+	}
+	return box.Render(strings.TrimRight(content, "\n")) + "\n"
 }
 
 func (a App) activeOverlay() string {
@@ -347,8 +364,11 @@ func (a App) activeScreenKeys() help.KeyMap {
 }
 
 func (a App) headerView() string {
-	header := style.Title.Render("netfu")
-	return a.clipToWidth(header) + "\n"
+	logo := style.Logo.Render("netfu")
+	if a.width > 0 {
+		logo = lipgloss.NewStyle().Width(a.width).AlignHorizontal(lipgloss.Right).Render(logo)
+	}
+	return a.clipToWidth(logo) + "\n"
 }
 
 func (a App) tabBarView() string {

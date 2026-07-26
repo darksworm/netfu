@@ -1,24 +1,24 @@
-netfu
+                                                                           netfu
 [1] Wi-Fi · [2] Devices · [3] Connections · [4] System   scan ⟳
-▸ Our House 1              ▂▄▆█  82%  WPA2    ✓ connected                       
-  Our House 5G             ▂▄▆   61%  WPA3    ⋆ saved
-  Neighbors                ▂▄▆   68%  WPA2
-  CafeGuest                ▂▄    47%  open
-  (hidden)                 ▂▄    33%  WPA2    hidden
-
-─ out of range ─
-  Summer House             ⋆ saved
-
-
-
-
-
-
-
-
-
-
-
-
+╭──────────────────────────────────────────────────────────────────────────────╮
+│ ▸ Our House 1              ▂▄▆█  82%  WPA2    ✓ connected                    │
+│   Our House 5G             ▂▄▆   61%  WPA3    ⋆ saved                        │
+│   Neighbors                ▂▄▆   68%  WPA2                                   │
+│   CafeGuest                ▂▄    47%  open                                   │
+│   (hidden)                 ▂▄    33%  WPA2    hidden                         │
+│                                                                              │
+│                                                                              │
+│                                                                              │
+│                                                                              │
+│                                                                              │
+│                                                                              │
+│                                                                              │
+│                                                                              │
+│                                                                              │
+│                                                                              │
+│                                                                              │
+│ ─ out of range ─                                                             │
+│   Summer House             ⋆ saved                                           │
+╰──────────────────────────────────────────────────────────────────────────────╯
 
 ↑/k up • ↓/j down • ↵ connect • / filter • ? help • q quit
