@@ -213,6 +213,12 @@ func TestWifi_SavedConnectionOutOfRangeListedInKnownSectionAsUnavailable(t *test
 	if row := lineContaining(t, view, "Summer House"); strings.Contains(row, "%") {
 		t.Errorf("an out-of-range network has no signal to show, got: %s", row)
 	}
+	// \x1b[2m — the whole section is faint: it's context, not actionable.
+	for _, marker := range []string{"out of range", "Summer House"} {
+		if row := lineContaining(t, view, marker); !strings.Contains(row, "\x1b[2m") {
+			t.Errorf("the out-of-range section should render greyed out, got: %s", row)
+		}
+	}
 }
 
 func TestWifi_SlashFilterMatchesSSIDCaseInsensitive(t *testing.T) {

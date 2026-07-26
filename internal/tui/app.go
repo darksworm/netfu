@@ -281,11 +281,10 @@ func (a App) View() tea.View {
 	if a.height > 0 {
 		content = padToHeight(content, a.height-chromeLines)
 	}
-	content = a.boxed(content)
-	// The status line is always reserved so async feedback never shifts
-	// the content above it.
+	// The status line lives on the box's last interior row — always
+	// reserved so async feedback never shifts the content above it.
+	content = a.boxed(strings.TrimRight(content, "\n") + "\n" + a.status.View())
 	sections := []string{a.headerView(), a.tabBarView(), content,
-		a.status.View() + "\n",
 		a.help.View(helpKeys{screen: a.activeScreenKeys(), global: a.keys})}
 	base := strings.Join(sections, "")
 	if overlay := a.activeOverlay(); overlay != "" {
@@ -364,7 +363,11 @@ func (a App) activeScreenKeys() help.KeyMap {
 }
 
 func (a App) headerView() string {
-	logo := style.Logo.Render("netfu")
+	logoStyle := style.Logo
+	if a.theme.Dim != nil {
+		logoStyle = logoStyle.Foreground(a.theme.Dim)
+	}
+	logo := logoStyle.Render("netfu")
 	if a.width > 0 {
 		logo = lipgloss.NewStyle().Width(a.width).AlignHorizontal(lipgloss.Right).Render(logo)
 	}
