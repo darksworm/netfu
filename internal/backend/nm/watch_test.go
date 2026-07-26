@@ -4,8 +4,53 @@ import (
 	"testing"
 	"time"
 
+	"github.com/godbus/dbus/v5"
+
 	"github.com/ilmars/netfu/internal/domain"
 )
+
+func TestWatcher_APStrengthSignalCarriesSSIDAndNewStrength(t *testing.T) {
+	apPath := dbus.ObjectPath("/org/freedesktop/NetworkManager/AccessPoint/7")
+	w := &watcher{apSSID: func(path dbus.ObjectPath) string {
+		if path == apPath {
+			return "Our House 1"
+		}
+		return ""
+	}}
+
+	e, ok := w.eventFor(&dbus.Signal{
+		Path: apPath,
+		Name: propertiesInterface + ".PropertiesChanged",
+		Body: []any{apInterface, map[string]dbus.Variant{"Strength": dbus.MakeVariant(byte(71))}},
+	})
+
+	if !ok || e.Kind != domain.EventAPStrength {
+		t.Fatalf("eventFor = %v, %v; want an ap-strength event", e, ok)
+	}
+	if e.SSID != "Our House 1" {
+		t.Errorf("SSID = %q, want the AP's SSID so the row can be updated", e.SSID)
+	}
+	if e.Strength != 71 {
+		t.Errorf("Strength = %d, want the new value carried by the signal", e.Strength)
+	}
+}
+
+func TestWatcher_LastScanBumpEmitsAPListChangedEvent(t *testing.T) {
+	w := &watcher{deviceNames: func(dbus.ObjectPath) string { return "wlan0" }}
+
+	e, ok := w.eventFor(&dbus.Signal{
+		Path: "/org/freedesktop/NetworkManager/Devices/3",
+		Name: propertiesInterface + ".PropertiesChanged",
+		Body: []any{wirelessInterface, map[string]dbus.Variant{"LastScan": dbus.MakeVariant(int64(12345))}},
+	})
+
+	if !ok || e.Kind != domain.EventAPListChanged {
+		t.Fatalf("eventFor = %v, %v; want an ap-list-changed event so the TUI re-reads the scan results", e, ok)
+	}
+	if e.DeviceName != "wlan0" {
+		t.Errorf("DeviceName = %q, want wlan0", e.DeviceName)
+	}
+}
 
 func TestStrengthGate_PassesFirstEventPerAP(t *testing.T) {
 	g := newStrengthGate()

@@ -12,12 +12,12 @@ import (
 	"github.com/ilmars/netfu/internal/tui"
 )
 
-func TestSmoke_BootShowsDeviceListAndQExitsCleanly(t *testing.T) {
+func TestSmoke_BootShowsWifiHomeTabAndQExitsCleanly(t *testing.T) {
 	tm := teatest.NewTestModel(t, tui.New(fake.SeedArchLaptop()),
 		teatest.WithInitialTermSize(80, 24))
 
 	teatest.WaitFor(t, tm.Output(), func(bts []byte) bool {
-		return bytes.Contains(bts, []byte("wlan0")) &&
+		return bytes.Contains(bts, []byte("[1] Wi-Fi")) &&
 			bytes.Contains(bts, []byte("Our House 1"))
 	}, teatest.WithDuration(3*time.Second))
 
