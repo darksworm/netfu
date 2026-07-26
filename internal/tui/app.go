@@ -41,8 +41,11 @@ type App struct {
 	theme    style.Theme
 	perms    domain.Permissions
 	status   statusbar.Model
-	width    int
-	height   int
+	// radioOn mirrors the wifi radio state the app last requested; NM has
+	// no per-session getter on the Backend seam, so on until toggled.
+	radioOn bool
+	width   int
+	height  int
 }
 
 func New(b backend.Backend) tea.Model {
@@ -54,6 +57,7 @@ func New(b backend.Backend) tea.Model {
 		devices: devices.New(b),
 		help:    help.New(),
 		status:  statusbar.New(),
+		radioOn: true,
 	}
 }
 
@@ -78,6 +82,7 @@ func (a App) Init() tea.Cmd {
 		loadPermissions(a.backend),
 		a.wifi.Init(),
 		waitForActivity(a.backend.Events()),
+		rescanTick(),
 	)
 }
 
@@ -98,13 +103,23 @@ func (a App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case tea.BackgroundColorMsg:
 		a.theme = style.NewTheme(msg.IsDark())
 		a.help.Styles = help.DefaultStyles(msg.IsDark())
-		return a, nil
+		var cmd tea.Cmd
+		a.wifi, cmd = a.wifi.Update(msg)
+		return a, cmd
 	case devices.StatusMsg:
 		a.status = a.status.SetMessage(string(msg))
 		return a, nil
 	case permissionsMsg:
 		a.perms = msg.perms
 		return a, nil
+	case rescanTickMsg:
+		cmds := []tea.Cmd{rescanTick()}
+		if a.tab == tabWifi && a.radioOn {
+			var cmd tea.Cmd
+			a.wifi, cmd = a.wifi.Update(wifi.RescanMsg{})
+			cmds = append(cmds, cmd)
+		}
+		return a, tea.Batch(cmds...)
 	case backendEventMsg:
 		var cmd tea.Cmd
 		a.wifi, cmd = a.wifi.Update(wifi.EventMsg(msg))
@@ -139,8 +154,21 @@ func (a App) handleKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		return a.switchTab((a.tab + 1) % tabCount)
 	case key.Matches(msg, a.keys.PrevTab):
 		return a.switchTab((a.tab + tabCount - 1) % tabCount)
+	case key.Matches(msg, a.keys.WifiRadio):
+		return a.toggleWifiRadio()
 	}
 	return a.updateActiveScreen(msg)
+}
+
+func (a App) toggleWifiRadio() (tea.Model, tea.Cmd) {
+	a.radioOn = !a.radioOn
+	radioOn := a.radioOn
+	setRadio := func() tea.Msg {
+		return radioResultMsg{err: a.backend.SetWifiEnabled(radioOn)}
+	}
+	var cmd tea.Cmd
+	a.wifi, cmd = a.wifi.Update(wifi.RadioMsg{Enabled: a.radioOn})
+	return a, tea.Batch(setRadio, cmd)
 }
 
 // switchTab activates a tab, re-running its entry cmd so the screen shows
@@ -174,7 +202,34 @@ func (a App) View() tea.View {
 		sections = append(sections, a.status.View()+"\n")
 	}
 	sections = append(sections, a.help.View(helpKeys{screen: a.activeScreenKeys(), global: a.keys}))
-	return tea.NewView(strings.Join(sections, ""))
+	base := strings.Join(sections, "")
+	if overlay := a.activeOverlay(); overlay != "" {
+		base = layerCentered(base, overlay)
+	}
+	return tea.NewView(base)
+}
+
+func (a App) activeOverlay() string {
+	switch a.tab {
+	case tabWifi:
+		return a.wifi.Overlay()
+	case tabDevices:
+		return a.devices.Overlay()
+	}
+	return ""
+}
+
+// layerCentered composites the modal over the base view instead of pushing
+// content down; the base keeps its footprint.
+func layerCentered(base, overlay string) string {
+	width, height := lipgloss.Width(base), lipgloss.Height(base)
+	return lipgloss.NewCompositor(
+		lipgloss.NewLayer(base),
+		lipgloss.NewLayer(overlay).
+			X(max((width-lipgloss.Width(overlay))/2, 0)).
+			Y(max((height-lipgloss.Height(overlay))/2, 0)).
+			Z(1),
+	).Render()
 }
 
 func (a App) activeScreenView() string {

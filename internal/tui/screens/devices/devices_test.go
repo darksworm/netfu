@@ -75,13 +75,13 @@ func TestDevices_DOffersDeactivateConfirmAndEscCancels(t *testing.T) {
 	m, _ = m.Update(keyPress('j'))
 
 	m, _ = m.Update(keyPress('d'))
-	if view := m.View(); !strings.Contains(view, "Deactivate Wired 1?") {
-		t.Fatalf("d on a connected device should open the deactivate confirm, got:\n%s", view)
+	if overlay := m.Overlay(); !strings.Contains(overlay, "Deactivate Wired 1?") {
+		t.Fatalf("d on a connected device should open the deactivate confirm, got:\n%s", overlay)
 	}
 
 	m, _ = m.Update(tea.KeyPressMsg{Code: tea.KeyEsc})
-	if view := m.View(); strings.Contains(view, "Deactivate Wired 1?") {
-		t.Fatalf("esc should dismiss the confirm, got:\n%s", view)
+	if overlay := m.Overlay(); strings.Contains(overlay, "Deactivate Wired 1?") {
+		t.Fatalf("esc should dismiss the confirm, got:\n%s", overlay)
 	}
 	if len(f.Calls) != 0 {
 		t.Errorf("cancelling should not touch the backend, calls: %v", f.Calls)

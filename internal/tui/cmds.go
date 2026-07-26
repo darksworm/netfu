@@ -1,11 +1,22 @@
 package tui
 
 import (
+	"time"
+
 	tea "charm.land/bubbletea/v2"
 
 	"github.com/ilmars/netfu/internal/backend"
 	"github.com/ilmars/netfu/internal/domain"
 )
+
+// rescanTick drives the periodic wifi rescan. The app re-arms it on every
+// tick regardless of tab (one live chain, no storms) and only acts on it
+// while the wifi tab is visible.
+func rescanTick() tea.Cmd {
+	return tea.Tick(15*time.Second, func(time.Time) tea.Msg {
+		return rescanTickMsg{}
+	})
+}
 
 // waitForActivity blocks on the backend's fan-in channel; the root model
 // re-arms it after every backendEventMsg (the bubbletea realtime pattern).

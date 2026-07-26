@@ -275,6 +275,289 @@ func TestWifi_EnterOnUnknownSecuredNetworkEmitsNeedsSecret(t *testing.T) {
 	}
 }
 
+func TestWifi_EnterOnUnknownWPA2NetworkOpensPasswordPrompt(t *testing.T) {
+	f := fake.SeedArchLaptop()
+	p := newPump(t, New(f))
+	p.send(tea.WindowSizeMsg{Width: 80, Height: 24})
+
+	p.send(keyPress('j'))
+	p.send(keyPress('j'))
+	if got := p.app().wifi.Selected().SSID; got != "Neighbors" {
+		t.Fatalf("precondition: cursor should be on Neighbors, got %q", got)
+	}
+	linesBefore := strings.Count(p.view(), "\n")
+
+	p.send(tea.KeyPressMsg{Code: tea.KeyEnter})
+
+	view := p.view()
+	for _, want := range []string{"Connect to Neighbors", "Security  WPA2", "Password", "↵ connect", "esc cancel"} {
+		if !strings.Contains(view, want) {
+			t.Errorf("the password prompt should show %q, got:\n%s", want, view)
+		}
+	}
+	if !strings.Contains(view, "Summer House") {
+		t.Errorf("the prompt should overlay the list, not replace it, got:\n%s", view)
+	}
+	if linesAfter := strings.Count(view, "\n"); linesAfter != linesBefore {
+		t.Errorf("the prompt should overlay the content, not push it (lines %d -> %d):\n%s",
+			linesBefore, linesAfter, view)
+	}
+
+	p.send(tea.KeyPressMsg{Code: tea.KeyEscape})
+	if view := p.view(); strings.Contains(view, "esc cancel") {
+		t.Errorf("esc should close the prompt without connecting, got:\n%s", view)
+	}
+	if len(f.JoinCalls) != 0 {
+		t.Errorf("opening and cancelling the prompt must not connect, got %+v", f.JoinCalls)
+	}
+}
+
+func TestWifi_PasswordSubmitCallsJoinWifiWithPSKAndKeyMgmt(t *testing.T) {
+	f := fake.SeedArchLaptop()
+	// An unknown WPA3-only network: its join must request SAE key management.
+	f.APList = append(f.APList, domain.AccessPoint{
+		SSID: "Loft 6E", Strength: 40, BSSID: "AA:BB:CC:88:88:88", Security: domain.SecurityWPA3,
+	})
+	p := newPump(t, New(f))
+
+	p.send(keyPress('j'))
+	p.send(keyPress('j'))
+	p.send(tea.KeyPressMsg{Code: tea.KeyEnter})
+	for _, r := range "hunter2" {
+		p.send(keyPress(r))
+	}
+	p.send(tea.KeyPressMsg{Code: tea.KeyEnter})
+
+	if len(f.JoinCalls) != 1 {
+		t.Fatalf("submitting the password should call JoinWifi once, got %d (%v)", len(f.JoinCalls), f.Calls)
+	}
+	got := f.JoinCalls[0]
+	want := domain.JoinRequest{SSID: "Neighbors", Security: domain.SecurityWPA2, PSK: "hunter2"}
+	if got != want {
+		t.Errorf("JoinWifi request = %+v, want %+v", got, want)
+	}
+	if view := p.view(); !strings.Contains(view, "Connecting to Neighbors…") {
+		t.Errorf("the status line should announce the join, got:\n%s", view)
+	}
+
+	// WPA3-only network → the request carries wpa3, which the NM adapter
+	// maps to key-mgmt "sae".
+	p.send(keyPress('/'))
+	for _, r := range "Loft" {
+		p.send(keyPress(r))
+	}
+	p.send(tea.KeyPressMsg{Code: tea.KeyEnter})
+	if got := p.app().wifi.Selected().SSID; got != "Loft 6E" {
+		t.Fatalf("precondition: cursor should be on Loft 6E, got %q", got)
+	}
+	p.send(tea.KeyPressMsg{Code: tea.KeyEnter})
+	for _, r := range "sae-secret" {
+		p.send(keyPress(r))
+	}
+	p.send(tea.KeyPressMsg{Code: tea.KeyEnter})
+
+	if len(f.JoinCalls) != 2 {
+		t.Fatalf("submitting the WPA3 password should call JoinWifi, got %d (%v)", len(f.JoinCalls), f.Calls)
+	}
+	got = f.JoinCalls[1]
+	want = domain.JoinRequest{SSID: "Loft 6E", Security: domain.SecurityWPA3, PSK: "sae-secret"}
+	if got != want {
+		t.Errorf("WPA3 JoinWifi request = %+v, want %+v", got, want)
+	}
+}
+
+func TestWifi_WrongPasswordShowsErrorAndReopensPromptWithSSIDPreserved(t *testing.T) {
+	f := fake.SeedArchLaptop()
+	p := newPump(t, New(f))
+
+	p.send(keyPress('j'))
+	p.send(keyPress('j'))
+	p.send(tea.KeyPressMsg{Code: tea.KeyEnter})
+	for _, r := range "wrongpass" {
+		p.send(keyPress(r))
+	}
+	p.send(tea.KeyPressMsg{Code: tea.KeyEnter})
+	if len(f.JoinCalls) != 1 {
+		t.Fatalf("precondition: the join should have been issued, got %v", f.Calls)
+	}
+
+	// NM tears the activation down; the adapter reports the auth-failure
+	// reason on the device state change.
+	f.Push(domain.Event{
+		Kind:       domain.EventDeviceChanged,
+		DeviceName: "wlan0",
+		Reason:     domain.ReasonNoSecrets,
+	})
+	p.deliverNext()
+
+	if view := p.view(); !strings.Contains(view, "Wrong password for Neighbors — ↵ to retry") {
+		t.Errorf("the status line should report the wrong password, got:\n%s", view)
+	}
+	if len(f.DeleteCalls) != 1 || f.DeleteCalls[0] != "joined-Neighbors" {
+		t.Errorf("the half-created profile should be deleted, got deletes %v", f.DeleteCalls)
+	}
+
+	p.send(tea.KeyPressMsg{Code: tea.KeyEnter})
+	view := p.view()
+	if !strings.Contains(view, "Connect to Neighbors") {
+		t.Fatalf("enter should reopen the prompt for the same SSID, got:\n%s", view)
+	}
+	if !strings.Contains(view, "*********") {
+		t.Errorf("the previous input should be preserved in the reopened prompt, got:\n%s", view)
+	}
+
+	p.send(tea.KeyPressMsg{Code: tea.KeyEnter})
+	if len(f.JoinCalls) != 2 || f.JoinCalls[1].PSK != "wrongpass" {
+		t.Errorf("resubmitting should retry with the preserved input, got %+v", f.JoinCalls)
+	}
+}
+
+func TestWifi_HiddenNetworkJoinFlowPromptsForSSIDThenSecret(t *testing.T) {
+	f := fake.SeedArchLaptop()
+	p := newPump(t, New(f))
+
+	p.send(keyPress('G'))
+	if got := p.app().wifi.Selected(); got.SSID != "" || got.BSSID != "AA:BB:CC:66:66:66" {
+		t.Fatalf("precondition: cursor should be on the hidden row, got %+v", got)
+	}
+
+	p.send(tea.KeyPressMsg{Code: tea.KeyEnter})
+	view := p.view()
+	if !strings.Contains(view, "Hidden network") || !strings.Contains(view, "SSID") {
+		t.Fatalf("enter on a hidden row should open the SSID entry modal, got:\n%s", view)
+	}
+
+	for _, r := range "SecretNet" {
+		p.send(keyPress(r))
+	}
+	p.send(tea.KeyPressMsg{Code: tea.KeyEnter})
+	view = p.view()
+	if !strings.Contains(view, "Connect to SecretNet") || !strings.Contains(view, "Password") {
+		t.Fatalf("the SSID entry should hand over to the password prompt, got:\n%s", view)
+	}
+
+	for _, r := range "hush-hush" {
+		p.send(keyPress(r))
+	}
+	p.send(tea.KeyPressMsg{Code: tea.KeyEnter})
+
+	if len(f.JoinCalls) != 1 {
+		t.Fatalf("finishing the flow should call JoinWifi once, got %d (%v)", len(f.JoinCalls), f.Calls)
+	}
+	got := f.JoinCalls[0]
+	want := domain.JoinRequest{SSID: "SecretNet", Hidden: true, Security: domain.SecurityWPA2, PSK: "hush-hush"}
+	if got != want {
+		t.Errorf("hidden JoinWifi request = %+v, want %+v", got, want)
+	}
+
+	// c starts the same flow from anywhere in the list.
+	p.send(keyPress('g'))
+	p.send(keyPress('c'))
+	if view := p.view(); !strings.Contains(view, "Hidden network") {
+		t.Errorf("c should open the hidden-network SSID entry from any row, got:\n%s", view)
+	}
+}
+
+func TestWifi_EnterpriseNetworkShowsUnsupportedNoticeV1(t *testing.T) {
+	f := fake.SeedArchLaptop()
+	f.APList = append(f.APList, domain.AccessPoint{
+		SSID: "CorpNet", Strength: 70, BSSID: "AA:BB:CC:99:99:99", Security: domain.SecurityEnterprise,
+	})
+	p := newPump(t, New(f))
+
+	p.send(keyPress('/'))
+	for _, r := range "Corp" {
+		p.send(keyPress(r))
+	}
+	p.send(tea.KeyPressMsg{Code: tea.KeyEnter})
+	if got := p.app().wifi.Selected().SSID; got != "CorpNet" {
+		t.Fatalf("precondition: cursor should be on CorpNet, got %q", got)
+	}
+
+	p.send(tea.KeyPressMsg{Code: tea.KeyEnter})
+
+	view := p.view()
+	if !strings.Contains(view, "802.1X networks are not supported yet") {
+		t.Errorf("enter on an enterprise network should explain it is unsupported, got:\n%s", view)
+	}
+	if strings.Contains(view, "Password") {
+		t.Errorf("no password modal should open for an enterprise network, got:\n%s", view)
+	}
+	if len(f.JoinCalls) != 0 || len(f.ActivateCalls) != 0 {
+		t.Errorf("an enterprise network must not be joined in v1, got joins %v activates %v",
+			f.JoinCalls, f.ActivateCalls)
+	}
+}
+
+func TestWifi_ToggleWifiRadioWithW(t *testing.T) {
+	f := fake.SeedArchLaptop()
+	p := newPump(t, New(f))
+
+	p.send(keyPress('W'))
+
+	if len(f.SetWifiEnabledCalls) != 1 || f.SetWifiEnabledCalls[0] != false {
+		t.Fatalf("W should turn the radio off, got calls %v", f.SetWifiEnabledCalls)
+	}
+	view := p.view()
+	if !strings.Contains(view, "Wi-Fi is off — press W to enable") {
+		t.Errorf("the wifi tab should show the radio-off empty state, got:\n%s", view)
+	}
+	if strings.Contains(view, "Our House 1") {
+		t.Errorf("no scan rows should render while the radio is off, got:\n%s", view)
+	}
+
+	p.send(keyPress('W'))
+
+	if len(f.SetWifiEnabledCalls) != 2 || f.SetWifiEnabledCalls[1] != true {
+		t.Fatalf("W again should turn the radio back on, got calls %v", f.SetWifiEnabledCalls)
+	}
+	if view := p.view(); !strings.Contains(view, "Our House 1") {
+		t.Errorf("re-enabling the radio should bring the list back, got:\n%s", view)
+	}
+}
+
+func TestWifi_DeactivateCurrentNetworkWithD(t *testing.T) {
+	f := fake.SeedArchLaptop()
+	p := newPump(t, New(f))
+
+	if got := p.app().wifi.Selected().SSID; got != "Our House 1" {
+		t.Fatalf("precondition: cursor should be on the active network, got %q", got)
+	}
+
+	p.send(keyPress('d'))
+	view := p.view()
+	if !strings.Contains(view, "Deactivate Our House 1?") {
+		t.Fatalf("d on the active row should ask for confirmation, got:\n%s", view)
+	}
+
+	p.send(keyPress('n'))
+	if containsCall(f.Calls, "Deactivate(our-house-1)") {
+		t.Fatal("declining the confirm must not deactivate")
+	}
+
+	p.send(keyPress('d'))
+	p.send(keyPress('y'))
+	if !containsCall(f.Calls, "Deactivate(our-house-1)") {
+		t.Errorf("confirming should deactivate the active wifi connection, got calls %v", f.Calls)
+	}
+
+	// d away from the active row has nothing to deactivate.
+	p.send(keyPress('G'))
+	p.send(keyPress('d'))
+	if view := p.view(); strings.Contains(view, "Deactivate") {
+		t.Errorf("d on an inactive row should not open a confirm, got:\n%s", view)
+	}
+}
+
+func containsCall(calls []string, want string) bool {
+	for _, c := range calls {
+		if c == want {
+			return true
+		}
+	}
+	return false
+}
+
 func lineContaining(t *testing.T, view, want string) string {
 	t.Helper()
 	for _, line := range strings.Split(view, "\n") {
