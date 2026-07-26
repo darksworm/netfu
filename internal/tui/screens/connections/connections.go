@@ -11,7 +11,6 @@ import (
 	"charm.land/bubbles/v2/help"
 	"charm.land/bubbles/v2/key"
 	tea "charm.land/bubbletea/v2"
-	"charm.land/lipgloss/v2"
 
 	"github.com/ilmars/netfu/internal/backend"
 	"github.com/ilmars/netfu/internal/domain"
@@ -49,9 +48,6 @@ type Model struct {
 type actionResultMsg struct {
 	status string
 }
-
-// dim greys out actions polkit has locked.
-var dim = lipgloss.NewStyle().Faint(true)
 
 type loadedMsg struct {
 	conns   []domain.Connection
@@ -446,6 +442,9 @@ func (m Model) renderRow(c domain.Connection, selected bool) string {
 }
 
 func (m Model) View() string {
+	if m.err != nil {
+		return style.NMNotRunningNotice + "\n"
+	}
 	if m.editor != nil {
 		return m.editor.View()
 	}
@@ -457,7 +456,7 @@ func (m Model) View() string {
 		fmt.Sprintf("   %-20s %-10s %-10s %s", "NAME", "TYPE", "DEVICE", "LAST USED"),
 	}
 	if !m.canModify() {
-		lines = append(lines, dim.Render("🔒 edit · delete · new — not permitted (polkit)"))
+		lines = append(lines, style.Faint.Render("🔒 edit · delete · new — not permitted (polkit)"))
 	}
 	selected := m.Selected()
 	for _, g := range m.groups() {
@@ -469,14 +468,5 @@ func (m Model) View() string {
 	if m.modal != nil {
 		lines = append(lines, strings.Split(m.modal.View(), "\n")...)
 	}
-	if m.height > 0 && len(lines) > m.height {
-		lines = lines[:m.height]
-	}
-	if m.width > 0 {
-		clip := lipgloss.NewStyle().MaxWidth(m.width)
-		for i, line := range lines {
-			lines[i] = clip.Render(line)
-		}
-	}
-	return strings.Join(lines, "\n") + "\n"
+	return style.Fit(lines, m.width, m.height)
 }

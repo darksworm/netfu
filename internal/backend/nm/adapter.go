@@ -251,6 +251,18 @@ func (a *Adapter) Hostname() (string, error) {
 	return a.settings.GetPropertyHostname()
 }
 
+func (a *Adapter) WifiEnabled() (bool, error) {
+	return a.nm.GetPropertyWirelessEnabled()
+}
+
+func (a *Adapter) NMState() (domain.NMState, error) {
+	state, err := a.nm.GetPropertyState()
+	if err != nil {
+		return domain.NMStateUnknown, err
+	}
+	return nmStateFromNM(state), nil
+}
+
 // Permissions queries org.freedesktop.NetworkManager.GetPermissions directly:
 // gonetworkmanager declares the method name but never wraps it. NM answers
 // "yes"/"no"/"auth" per permission; "auth" counts as allowed because the

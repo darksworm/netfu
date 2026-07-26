@@ -13,9 +13,19 @@ import (
 	"github.com/ilmars/netfu/internal/tui"
 )
 
+// version is overridable at build time:
+// go build -ldflags "-X main.version=v1.2.3" ./cmd/netfu
+var version = "dev"
+
 func main() {
 	useFake := flag.Bool("fake", false, "run against seeded fixture data instead of NetworkManager")
+	showVersion := flag.Bool("version", false, "print the version and exit")
 	flag.Parse()
+
+	if *showVersion {
+		fmt.Println("netfu", version)
+		return
+	}
 
 	var b backend.Backend
 	if *useFake {

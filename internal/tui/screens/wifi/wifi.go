@@ -27,10 +27,11 @@ type NeedsSecretMsg struct {
 	AP domain.AccessPoint
 }
 
-// RadioMsg tells the screen the wifi radio state the user chose with the
-// global toggle.
+// RadioMsg tells the screen the wifi radio state; Err is set when a toggle
+// failed and Enabled is the state the radio actually kept.
 type RadioMsg struct {
 	Enabled bool
+	Err     error
 }
 
 // RescanMsg asks for a background rescan (the app's periodic timer).
@@ -88,7 +89,6 @@ type Model struct {
 	err       error
 	width     int
 	height    int
-	sized     bool
 }
 
 func New(b backend.Backend) Model {
@@ -200,7 +200,6 @@ func (m Model) Update(msg tea.Msg) (Model, tea.Cmd) {
 	case tea.WindowSizeMsg:
 		m.width = msg.Width
 		m.height = msg.Height
-		m.sized = true
 		return m, nil
 	case scanRequestedMsg:
 		m.scanning = msg.err == nil
@@ -228,6 +227,10 @@ func (m Model) Update(msg tea.Msg) (Model, tea.Cmd) {
 		return m, nil
 	case RadioMsg:
 		m.radioOff = !msg.Enabled
+		if msg.Err != nil {
+			m.notice = fmt.Sprintf("✗ wifi radio: %v", msg.Err)
+			return m, nil
+		}
 		if msg.Enabled {
 			return m, m.Init()
 		}
@@ -605,6 +608,9 @@ func (m Model) list() domain.WifiList {
 }
 
 func (m Model) View() string {
+	if m.err != nil {
+		return style.NMNotRunningNotice + "\n"
+	}
 	if m.radioOff {
 		return lipgloss.NewStyle().Foreground(m.theme.Attention).
 			Render("Wi-Fi is off — press W to enable") + "\n"
@@ -630,17 +636,8 @@ func (m Model) View() string {
 			lines = append(lines, fmt.Sprintf("  %-24s ⋆ saved", ssid))
 		}
 	}
-	if m.sized && len(lines) > m.height {
-		lines = lines[:m.height]
-	}
 	if len(lines) == 0 {
 		return ""
 	}
-	if m.width > 0 {
-		clip := lipgloss.NewStyle().MaxWidth(m.width)
-		for i, line := range lines {
-			lines[i] = clip.Render(line)
-		}
-	}
-	return strings.Join(lines, "\n") + "\n"
+	return style.Fit(lines, m.width, m.height)
 }

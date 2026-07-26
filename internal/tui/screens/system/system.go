@@ -5,11 +5,9 @@ package system
 
 import (
 	"fmt"
-	"strings"
 
 	"charm.land/bubbles/v2/key"
 	tea "charm.land/bubbletea/v2"
-	"charm.land/lipgloss/v2"
 
 	"github.com/ilmars/netfu/internal/backend"
 	"github.com/ilmars/netfu/internal/domain"
@@ -22,15 +20,12 @@ type StatusMsg string
 
 const permModifyHostname = "org.freedesktop.NetworkManager.settings.modify.hostname"
 
-var dim = lipgloss.NewStyle().Faint(true)
-
 type Model struct {
-	backend  backend.Backend
-	keys     keys.System
-	hostname string
-	// wifiEnabled is tracked optimistically from our own toggles: the
-	// Backend seam exposes no radio-state reader yet.
+	backend     backend.Backend
+	keys        keys.System
+	hostname    string
 	wifiEnabled bool
+	nmState     domain.NMState
 	active      []domain.ActiveConnection
 	vpns        []domain.Connection
 	cursor      int
@@ -45,10 +40,12 @@ type Model struct {
 }
 
 type loadedMsg struct {
-	hostname string
-	active   []domain.ActiveConnection
-	vpns     []domain.Connection
-	err      error
+	hostname    string
+	wifiEnabled bool
+	nmState     domain.NMState
+	active      []domain.ActiveConnection
+	vpns        []domain.Connection
+	err         error
 }
 
 type hostnameSavedMsg struct {
@@ -106,7 +103,15 @@ func (m Model) load() tea.Msg {
 			vpns = append(vpns, c)
 		}
 	}
-	return loadedMsg{hostname: hostname, active: active, vpns: vpns}
+	wifiEnabled, err := m.backend.WifiEnabled()
+	if err != nil {
+		return loadedMsg{err: err}
+	}
+	nmState, err := m.backend.NMState()
+	if err != nil {
+		return loadedMsg{err: err}
+	}
+	return loadedMsg{hostname: hostname, wifiEnabled: wifiEnabled, nmState: nmState, active: active, vpns: vpns}
 }
 
 func (m Model) Keys() keys.System {
@@ -175,6 +180,10 @@ func (m Model) Update(msg tea.Msg) (Model, tea.Cmd) {
 	switch msg := msg.(type) {
 	case loadedMsg:
 		m.hostname = msg.hostname
+		if msg.err == nil {
+			m.wifiEnabled = msg.wifiEnabled
+			m.nmState = msg.nmState
+		}
 		m.active = msg.active
 		m.vpns = msg.vpns
 		m.err = msg.err
@@ -319,6 +328,9 @@ func deactivate(mut backend.Mutator, r row) tea.Cmd {
 }
 
 func (m Model) View() string {
+	if m.err != nil {
+		return style.NMNotRunningNotice + "\n"
+	}
 	var lines []string
 	lines = append(lines, style.Title.Render("System"))
 	printedConnectionsHeader := false
@@ -333,25 +345,15 @@ func (m Model) View() string {
 	if !printedConnectionsHeader {
 		lines = append(lines, m.nmStateLine())
 	}
-	if m.height > 0 && len(lines) > m.height {
-		lines = lines[:m.height]
-	}
-	if m.width > 0 {
-		clip := lipgloss.NewStyle().MaxWidth(m.width)
-		for i, line := range lines {
-			lines[i] = clip.Render(line)
-		}
-	}
-	return strings.Join(lines, "\n") + "\n"
+	return style.Fit(lines, m.width, m.height)
 }
 
-// nmStateLine is informational, not a selectable row. The Backend seam has
-// no NM-state reader, so reachability is derived from the last load.
+// nmStateLine is informational, not a selectable row.
 func (m Model) nmStateLine() string {
 	if m.err != nil {
 		return fmt.Sprintf("  %-24s unreachable — systemctl start NetworkManager", "NetworkManager:")
 	}
-	return fmt.Sprintf("  %-24s running", "NetworkManager:")
+	return fmt.Sprintf("  %-24s %s", "NetworkManager:", m.nmState)
 }
 
 func (m Model) renderRow(r row, selected bool) string {
@@ -364,7 +366,7 @@ func (m Model) renderRow(r row, selected bool) string {
 	}
 	line := fmt.Sprintf("%-24s %s", label, r.detail)
 	if r.kind == rowHostname && !m.hostnameAllowed() {
-		line = dim.Render(line + " 🔒")
+		line = style.Faint.Render(line + " 🔒")
 	} else if selected {
 		line = style.Selected.Render(line)
 	}

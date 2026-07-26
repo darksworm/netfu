@@ -1,6 +1,7 @@
 package tui
 
 import (
+	"errors"
 	"image/color"
 	"strings"
 	"testing"
@@ -98,16 +99,16 @@ func TestApp_ResizePropagatesToActiveScreenAndListsReflow(t *testing.T) {
 	f := fake.SeedArchLaptop()
 	p := newPump(t, New(f))
 
-	p.send(tea.WindowSizeMsg{Width: 20, Height: 3})
+	p.send(tea.WindowSizeMsg{Width: 60, Height: 16})
 
 	view := p.view()
 	lines := strings.Split(strings.TrimRight(view, "\n"), "\n")
-	if len(lines) > 3 {
-		t.Errorf("view should fit in 3 rows after resize, got %d:\n%s", len(lines), view)
+	if len(lines) > 16 {
+		t.Errorf("view should fit in 16 rows after resize, got %d:\n%s", len(lines), view)
 	}
 	for _, line := range lines {
-		if w := lipgloss.Width(line); w > 20 {
-			t.Errorf("line %q is %d cells wide, should reflow to <= 20", line, w)
+		if w := lipgloss.Width(line); w > 60 {
+			t.Errorf("line %q is %d cells wide, should reflow to <= 60", line, w)
 		}
 	}
 }
@@ -432,4 +433,142 @@ func containsQuit(msgs []tea.Msg) bool {
 		}
 	}
 	return false
+}
+
+func TestApp_InitializesWifiRadioStateFromBackend(t *testing.T) {
+	f := fake.SeedArchLaptop()
+	f.WifiOn = false
+	p := newPump(t, New(f))
+
+	if p.app().radioOn {
+		t.Error("the app should adopt the backend's radio state at startup, not assume on")
+	}
+	if view := p.view(); !strings.Contains(view, "Wi-Fi is off — press W to enable") {
+		t.Errorf("the wifi tab should show the radio-off state, got:\n%s", view)
+	}
+
+	// W from the off state must turn the radio on, not off.
+	p.send(keyPress('W'))
+	if calls := f.SetWifiEnabledCalls; len(calls) == 0 || !calls[len(calls)-1] {
+		t.Errorf("W should enable the radio, got calls %v", f.SetWifiEnabledCalls)
+	}
+}
+
+func TestApp_QPopsDeviceDetailLayerAndOnlyQuitsFromTopLevel(t *testing.T) {
+	f := fake.SeedArchLaptop()
+	p := newPump(t, New(f))
+
+	p.send(keyPress('2'))
+	p.send(keyPress('i'))
+	if view := p.view(); !strings.Contains(view, "Device wlan0") {
+		t.Fatalf("precondition: i should push the device detail, got:\n%s", view)
+	}
+
+	p.send(keyPress('q'))
+	if containsQuit(p.msgs) {
+		t.Fatal("q on a pushed layer should pop it, not quit the app")
+	}
+	if view := p.view(); strings.Contains(view, "Device wlan0") {
+		t.Errorf("q should have popped the detail back to the list, got:\n%s", view)
+	}
+
+	p.send(keyPress('q'))
+	if !containsQuit(p.msgs) {
+		t.Error("q at top level should quit")
+	}
+}
+
+func TestApp_QPopsConnectionEditorLayerInsteadOfQuitting(t *testing.T) {
+	f := fake.SeedArchLaptop()
+	p := newPump(t, New(f))
+
+	p.send(keyPress('3'))
+	p.send(keyPress('e'))
+	if view := p.view(); !strings.Contains(view, "Our House 1") || !strings.Contains(view, "Autoconnect") {
+		t.Fatalf("precondition: e should push the editor, got:\n%s", view)
+	}
+
+	p.send(keyPress('q'))
+	if containsQuit(p.msgs) {
+		t.Fatal("q inside the editor should pop it, not quit the app")
+	}
+	if view := p.view(); strings.Contains(view, "Autoconnect") {
+		t.Errorf("q should have popped the editor back to the list, got:\n%s", view)
+	}
+}
+
+func TestApp_BelowMinimumSizeShowsTooSmallScreenAndRecoversOnResize(t *testing.T) {
+	f := fake.SeedArchLaptop()
+	p := newPump(t, New(f))
+
+	p.send(tea.WindowSizeMsg{Width: 59, Height: 16})
+	view := p.view()
+	if !strings.Contains(view, "Terminal too small (59x16, need 60x16)") {
+		t.Errorf("a too-narrow terminal should show the too-small screen, got:\n%s", view)
+	}
+	if strings.Contains(view, "[1] Wi-Fi") {
+		t.Errorf("the too-small screen should replace the whole pane, got:\n%s", view)
+	}
+
+	p.send(tea.WindowSizeMsg{Width: 80, Height: 24})
+	if view := p.view(); !strings.Contains(view, "[1] Wi-Fi") {
+		t.Errorf("growing the terminal should restore the app, got:\n%s", view)
+	}
+}
+
+func TestApp_BackendConnectionErrorShowsNMNotRunningOnEveryTabUntilALoadSucceeds(t *testing.T) {
+	f := fake.SeedArchLaptop()
+	down := errors.New("dbus: connection refused")
+	for _, call := range []string{"Devices", "Connections", "ActiveConnections", "AccessPoints", "Hostname"} {
+		f.Errs[call] = down
+	}
+	p := newPump(t, New(f))
+
+	const notice = "NetworkManager is not running — systemctl start NetworkManager"
+	for _, tab := range []rune{'1', '2', '3', '4'} {
+		p.send(keyPress(tab))
+		if view := p.view(); !strings.Contains(view, notice) {
+			t.Errorf("tab %c should show the NM-not-running notice, got:\n%s", tab, view)
+		}
+	}
+
+	// NM comes back: the next successful reload clears the notice.
+	f.Errs = map[string]error{}
+	for _, tab := range []rune{'1', '2', '3', '4'} {
+		p.send(keyPress(tab))
+		if view := p.view(); strings.Contains(view, notice) {
+			t.Errorf("tab %c should recover after a successful reload, got:\n%s", tab, view)
+		}
+	}
+}
+
+func TestApp_RadioToggleFailureRevertsStateAndReportsError(t *testing.T) {
+	f := fake.SeedArchLaptop()
+	f.Errs["SetWifiEnabled"] = errors.New("blocked by rfkill")
+	p := newPump(t, New(f))
+
+	p.send(keyPress('W'))
+	if !p.app().radioOn {
+		t.Error("a failed radio toggle should revert to the backend's actual state")
+	}
+	if view := p.view(); !strings.Contains(view, "blocked by rfkill") {
+		t.Errorf("the failure should surface on the status line, got:\n%s", view)
+	}
+}
+
+func TestApp_ModalDimsTheBackdropBehindIt(t *testing.T) {
+	f := fake.SeedArchLaptop()
+	p := newPump(t, New(f))
+	p.send(tea.WindowSizeMsg{Width: 80, Height: 24})
+
+	p.send(keyPress('2'))
+	p.send(tea.KeyPressMsg{Code: tea.KeyEnter}) // confirm modal over the list
+
+	view := p.view()
+	if !strings.Contains(view, "Deactivate Our House 1?") {
+		t.Fatalf("precondition: the confirm modal should be open, got:\n%s", view)
+	}
+	if !strings.Contains(view, "\x1b[2m") {
+		t.Error("the backdrop under a modal should render faint")
+	}
 }

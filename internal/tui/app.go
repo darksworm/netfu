@@ -8,6 +8,7 @@ import (
 	"charm.land/bubbles/v2/key"
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
+	"github.com/charmbracelet/x/ansi"
 
 	"github.com/ilmars/netfu/internal/backend"
 	"github.com/ilmars/netfu/internal/domain"
@@ -45,8 +46,8 @@ type App struct {
 	theme    style.Theme
 	perms    domain.Permissions
 	status   statusbar.Model
-	// radioOn mirrors the wifi radio state the app last requested; NM has
-	// no per-session getter on the Backend seam, so on until toggled.
+	// radioOn is read from the backend at startup and tracked through the
+	// user's toggles.
 	radioOn bool
 	width   int
 	height  int
@@ -86,6 +87,7 @@ func (a App) Init() tea.Cmd {
 	return tea.Batch(
 		tea.RequestBackgroundColor,
 		loadPermissions(a.backend),
+		loadRadioState(a.backend),
 		a.wifi.Init(),
 		waitForActivity(a.backend.Events()),
 		rescanTick(),
@@ -120,6 +122,23 @@ func (a App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case system.StatusMsg:
 		a.status = a.status.SetMessage(string(msg))
 		return a, nil
+	case radioResultMsg:
+		if msg.err == nil {
+			return a, nil
+		}
+		a.radioOn = !a.radioOn // the toggle failed; NM kept the old state
+		var cmd tea.Cmd
+		a.wifi, cmd = a.wifi.Update(wifi.RadioMsg{Enabled: a.radioOn, Err: msg.err})
+		a.status = a.status.SetMessage(a.wifi.Status())
+		return a, cmd
+	case radioStateMsg:
+		if msg.err != nil || msg.enabled == a.radioOn {
+			return a, nil
+		}
+		a.radioOn = msg.enabled
+		var cmd tea.Cmd
+		a.wifi, cmd = a.wifi.Update(wifi.RadioMsg{Enabled: msg.enabled})
+		return a, cmd
 	case permissionsMsg:
 		a.perms = msg.perms
 		a.conns = a.conns.SetPermissions(msg.perms)
@@ -167,6 +186,10 @@ func (a App) handleKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		a.help.ShowAll = a.showHelp
 		return a, nil
 	case key.Matches(msg, a.keys.Quit):
+		// q pops a pushed layer and only quits from top level.
+		if a.tab == tabDevices && a.devices.Layered() {
+			return a.updateActiveScreen(msg)
+		}
 		return a, tea.Quit
 	case key.Matches(msg, a.keys.Tabs):
 		return a.switchTab(tab(msg.Code - '1'))
@@ -225,7 +248,16 @@ func (a App) updateActiveScreen(msg tea.Msg) (tea.Model, tea.Cmd) {
 	return a, cmd
 }
 
+const (
+	minWidth  = 60
+	minHeight = 16
+)
+
 func (a App) View() tea.View {
+	if a.width > 0 && (a.width < minWidth || a.height < minHeight) {
+		return tea.NewView(fmt.Sprintf("Terminal too small (%dx%d, need %dx%d)",
+			a.width, a.height, minWidth, minHeight))
+	}
 	sections := []string{a.headerView(), a.tabBarView(), a.activeScreenView()}
 	if a.status.Message() != "" {
 		sections = append(sections, a.status.View()+"\n")
@@ -249,11 +281,13 @@ func (a App) activeOverlay() string {
 }
 
 // layerCentered composites the modal over the base view instead of pushing
-// content down; the base keeps its footprint.
+// content down; the base keeps its footprint. The backdrop drops its own
+// styling and renders faint so the modal reads as the only active layer.
 func layerCentered(base, overlay string) string {
 	width, height := lipgloss.Width(base), lipgloss.Height(base)
+	backdrop := style.Faint.Render(ansi.Strip(base))
 	return lipgloss.NewCompositor(
-		lipgloss.NewLayer(base),
+		lipgloss.NewLayer(backdrop),
 		lipgloss.NewLayer(overlay).
 			X(max((width-lipgloss.Width(overlay))/2, 0)).
 			Y(max((height-lipgloss.Height(overlay))/2, 0)).
@@ -272,11 +306,7 @@ func (a App) activeScreenView() string {
 	case tabSystem:
 		return a.system.View()
 	}
-	return placeholderView(tabLabels[a.tab])
-}
-
-func placeholderView(label string) string {
-	return fmt.Sprintf("%s — coming soon\n", label)
+	return ""
 }
 
 func (a App) activeScreenKeys() help.KeyMap {

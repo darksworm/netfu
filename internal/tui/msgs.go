@@ -11,6 +11,12 @@ type permissionsMsg struct {
 	err   error
 }
 
+// radioStateMsg carries the startup wifi-radio state read from the backend.
+type radioStateMsg struct {
+	enabled bool
+	err     error
+}
+
 // radioResultMsg reports the SetWifiEnabled call's outcome.
 type radioResultMsg struct {
 	err error

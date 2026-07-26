@@ -220,3 +220,17 @@ func reasonFromNM(r gonm.NmDeviceStateReason) string {
 		return r.String()
 	}
 }
+
+func nmStateFromNM(s gonm.NmState) domain.NMState {
+	switch s {
+	case gonm.NmStateAsleep:
+		return domain.NMStateAsleep
+	case gonm.NmStateDisconnected, gonm.NmStateDisconnecting:
+		return domain.NMStateDisconnected
+	case gonm.NmStateConnecting:
+		return domain.NMStateConnecting
+	case gonm.NmStateConnectedLocal, gonm.NmStateConnectedSite, gonm.NmStateConnectedGlobal:
+		return domain.NMStateConnected
+	}
+	return domain.NMStateUnknown
+}

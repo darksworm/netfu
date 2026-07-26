@@ -26,6 +26,15 @@ func waitForActivity(events <-chan domain.Event) tea.Cmd {
 	}
 }
 
+// loadRadioState reads the wifi radio state at startup so the app does not
+// assume the radio is on.
+func loadRadioState(r backend.Reader) tea.Cmd {
+	return func() tea.Msg {
+		enabled, err := r.WifiEnabled()
+		return radioStateMsg{enabled: enabled, err: err}
+	}
+}
+
 // loadPermissions queries polkit permissions once; the result is cached on
 // the root model for the whole session.
 func loadPermissions(r backend.Reader) tea.Cmd {

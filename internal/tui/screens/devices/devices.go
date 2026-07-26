@@ -8,7 +8,6 @@ import (
 
 	"charm.land/bubbles/v2/key"
 	tea "charm.land/bubbletea/v2"
-	"charm.land/lipgloss/v2"
 
 	"github.com/ilmars/netfu/internal/backend"
 	"github.com/ilmars/netfu/internal/domain"
@@ -78,6 +77,12 @@ func (m Model) loadDevices() tea.Msg {
 
 func (m Model) Keys() keys.Devices {
 	return m.keys
+}
+
+// Layered reports whether a pushed layer is open, so the app routes q here
+// to pop it instead of quitting.
+func (m Model) Layered() bool {
+	return m.showDetail
 }
 
 // Overlay is the open modal's view, layered by the root model over the
@@ -150,18 +155,14 @@ func (m Model) handleKey(msg tea.KeyPressMsg) (Model, tea.Cmd) {
 	if m.filtering {
 		return m.handleFilterKey(msg), nil
 	}
-	// q should also pop this layer, but the app's global Quit binding
-	// consumes q before the screen sees it; that plumbing is app-level.
 	if m.showDetail {
-		if msg.Code == tea.KeyEsc {
+		if msg.Code == tea.KeyEsc || msg.Text == "q" {
 			m.showDetail = false
 		}
 		return m, nil
 	}
 	switch {
-	// The Devices keymap lives in the shared keys package owned by another
-	// lane this milestone; i is matched inline until it can host Info.
-	case msg.Text == "i":
+	case key.Matches(msg, m.keys.Info):
 		if len(m.visible()) > 0 {
 			m.showDetail = true
 		}
@@ -281,6 +282,9 @@ func deactivate(mut backend.Mutator, ac domain.ActiveConnection) tea.Cmd {
 }
 
 func (m Model) View() string {
+	if m.err != nil {
+		return style.NMNotRunningNotice + "\n"
+	}
 	if m.showDetail {
 		return m.detailView()
 	}
@@ -297,16 +301,7 @@ func (m Model) View() string {
 			lines = append(lines, "  "+row)
 		}
 	}
-	if m.height > 0 && len(lines) > m.height {
-		lines = lines[:m.height]
-	}
-	if m.width > 0 {
-		clip := lipgloss.NewStyle().MaxWidth(m.width)
-		for i, line := range lines {
-			lines[i] = clip.Render(line)
-		}
-	}
-	return strings.Join(lines, "\n") + "\n"
+	return style.Fit(lines, m.width, m.height)
 }
 
 func (m Model) detailView() string {
@@ -319,8 +314,5 @@ func (m Model) detailView() string {
 		fmt.Sprintf("%-20s %s", "Active connection:", d.ActiveConnection),
 		"esc back",
 	}
-	if m.height > 0 && len(lines) > m.height {
-		lines = lines[:m.height]
-	}
-	return strings.Join(lines, "\n") + "\n"
+	return style.Fit(lines, m.width, m.height)
 }

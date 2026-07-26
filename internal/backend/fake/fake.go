@@ -3,18 +3,24 @@ package fake
 
 import (
 	"fmt"
+	"sync"
 
 	"github.com/ilmars/netfu/internal/backend"
 	"github.com/ilmars/netfu/internal/domain"
 )
 
 type Fake struct {
+	// mu guards every field: bubbletea runs batched cmds concurrently.
+	mu sync.Mutex
+
 	DeviceList     []domain.Device
 	ConnectionList []domain.Connection
 	ActiveList     []domain.ActiveConnection
 	APList         []domain.AccessPoint
 	SettingsByID   map[string]domain.ConnectionSettings
 	HostnameValue  string
+	WifiOn         bool
+	NMStateValue   domain.NMState
 	Perms          domain.Permissions
 
 	// Errs makes the named method fail, e.g. Errs["JoinWifi"] = err.
@@ -51,6 +57,8 @@ var _ backend.Backend = (*Fake)(nil)
 func New() *Fake {
 	return &Fake{
 		SettingsByID: map[string]domain.ConnectionSettings{},
+		WifiOn:       true,
+		NMStateValue: domain.NMStateConnected,
 		Perms:        domain.Permissions{},
 		Errs:         map[string]error{},
 		events:       make(chan domain.Event, 64),
@@ -99,12 +107,16 @@ func (f *Fake) Push(e domain.Event) {
 	f.events <- e
 }
 
+// record appends to the call log; callers hold f.mu.
 func (f *Fake) record(call string) error {
 	f.Calls = append(f.Calls, call)
 	return f.Errs[call]
 }
 
 func (f *Fake) Devices() ([]domain.Device, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+
 	if err := f.Errs["Devices"]; err != nil {
 		return nil, err
 	}
@@ -112,6 +124,9 @@ func (f *Fake) Devices() ([]domain.Device, error) {
 }
 
 func (f *Fake) Connections() ([]domain.Connection, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+
 	if err := f.Errs["Connections"]; err != nil {
 		return nil, err
 	}
@@ -119,6 +134,9 @@ func (f *Fake) Connections() ([]domain.Connection, error) {
 }
 
 func (f *Fake) ActiveConnections() ([]domain.ActiveConnection, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+
 	if err := f.Errs["ActiveConnections"]; err != nil {
 		return nil, err
 	}
@@ -126,6 +144,9 @@ func (f *Fake) ActiveConnections() ([]domain.ActiveConnection, error) {
 }
 
 func (f *Fake) AccessPoints() ([]domain.AccessPoint, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+
 	if err := f.Errs["AccessPoints"]; err != nil {
 		return nil, err
 	}
@@ -133,6 +154,9 @@ func (f *Fake) AccessPoints() ([]domain.AccessPoint, error) {
 }
 
 func (f *Fake) GetSettings(connectionID string) (domain.ConnectionSettings, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+
 	if err := f.Errs["GetSettings"]; err != nil {
 		return nil, err
 	}
@@ -140,6 +164,9 @@ func (f *Fake) GetSettings(connectionID string) (domain.ConnectionSettings, erro
 }
 
 func (f *Fake) Hostname() (string, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+
 	if err := f.Errs["Hostname"]; err != nil {
 		return "", err
 	}
@@ -149,10 +176,33 @@ func (f *Fake) Hostname() (string, error) {
 // Permissions is logged to Calls, unlike the other readers, so tests can
 // assert it is queried once and cached.
 func (f *Fake) Permissions() (domain.Permissions, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+
 	if err := f.record("Permissions"); err != nil {
 		return nil, err
 	}
 	return f.Perms, nil
+}
+
+func (f *Fake) WifiEnabled() (bool, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+
+	if err := f.Errs["WifiEnabled"]; err != nil {
+		return false, err
+	}
+	return f.WifiOn, nil
+}
+
+func (f *Fake) NMState() (domain.NMState, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+
+	if err := f.Errs["NMState"]; err != nil {
+		return domain.NMStateUnknown, err
+	}
+	return f.NMStateValue, nil
 }
 
 func (f *Fake) Events() <-chan domain.Event {
@@ -160,12 +210,18 @@ func (f *Fake) Events() <-chan domain.Event {
 }
 
 func (f *Fake) Activate(connectionID, deviceName string) error {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+
 	f.ActivateCalls = append(f.ActivateCalls, ActivateCall{ConnectionID: connectionID, DeviceName: deviceName})
 	f.Calls = append(f.Calls, fmt.Sprintf("Activate(%s,%s)", connectionID, deviceName))
 	return f.Errs["Activate"]
 }
 
 func (f *Fake) Deactivate(activeConnectionID string) error {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+
 	f.Calls = append(f.Calls, fmt.Sprintf("Deactivate(%s)", activeConnectionID))
 	return f.Errs["Deactivate"]
 }
@@ -173,6 +229,9 @@ func (f *Fake) Deactivate(activeConnectionID string) error {
 // JoinWifi mirrors NM's AddAndActivateConnection: the profile is created
 // even when the activation later fails on a wrong password.
 func (f *Fake) JoinWifi(req domain.JoinRequest) error {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+
 	f.JoinCalls = append(f.JoinCalls, req)
 	if err := f.record("JoinWifi"); err != nil {
 		return err
@@ -210,20 +269,32 @@ func (f *Fake) activateOnWifiDevice(connID, name string) {
 }
 
 func (f *Fake) RequestScan() error {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+
 	return f.record("RequestScan")
 }
 
 func (f *Fake) UpdateSettings(connectionID string, settings domain.ConnectionSettings) error {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+
 	f.UpdateCalls = append(f.UpdateCalls, UpdateCall{ConnectionID: connectionID, Settings: settings})
 	return f.record("UpdateSettings")
 }
 
 func (f *Fake) AddConnection(settings domain.ConnectionSettings) error {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+
 	f.AddedSettings = append(f.AddedSettings, settings)
 	return f.record("AddConnection")
 }
 
 func (f *Fake) DeleteConnection(connectionID string) error {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+
 	f.DeleteCalls = append(f.DeleteCalls, connectionID)
 	f.Calls = append(f.Calls, fmt.Sprintf("DeleteConnection(%s)", connectionID))
 	if err := f.Errs["DeleteConnection"]; err != nil {
@@ -240,6 +311,9 @@ func (f *Fake) DeleteConnection(connectionID string) error {
 }
 
 func (f *Fake) SetHostname(hostname string) error {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+
 	f.Calls = append(f.Calls, fmt.Sprintf("SetHostname(%s)", hostname))
 	if err := f.Errs["SetHostname"]; err != nil {
 		return err
@@ -249,7 +323,14 @@ func (f *Fake) SetHostname(hostname string) error {
 }
 
 func (f *Fake) SetWifiEnabled(enabled bool) error {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+
 	f.SetWifiEnabledCalls = append(f.SetWifiEnabledCalls, enabled)
 	f.Calls = append(f.Calls, fmt.Sprintf("SetWifiEnabled(%t)", enabled))
-	return f.Errs["SetWifiEnabled"]
+	if err := f.Errs["SetWifiEnabled"]; err != nil {
+		return err
+	}
+	f.WifiOn = enabled
+	return nil
 }

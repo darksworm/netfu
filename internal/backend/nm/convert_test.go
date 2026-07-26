@@ -236,3 +236,24 @@ func TestSettingsToNM_LeavesScalarsAndEmptyArraysAlone(t *testing.T) {
 		t.Errorf("empty = %#v", out["connection"]["empty"])
 	}
 }
+
+func TestNMStateFromNM_CollapsesConnectedTiersAndTransitions(t *testing.T) {
+	cases := []struct {
+		in   gonm.NmState
+		want domain.NMState
+	}{
+		{gonm.NmStateConnectedGlobal, domain.NMStateConnected},
+		{gonm.NmStateConnectedSite, domain.NMStateConnected},
+		{gonm.NmStateConnectedLocal, domain.NMStateConnected},
+		{gonm.NmStateConnecting, domain.NMStateConnecting},
+		{gonm.NmStateDisconnecting, domain.NMStateDisconnected},
+		{gonm.NmStateDisconnected, domain.NMStateDisconnected},
+		{gonm.NmStateAsleep, domain.NMStateAsleep},
+		{gonm.NmStateUnknown, domain.NMStateUnknown},
+	}
+	for _, c := range cases {
+		if got := nmStateFromNM(c.in); got != c.want {
+			t.Errorf("nmStateFromNM(%d) = %q, want %q", c.in, got, c.want)
+		}
+	}
+}

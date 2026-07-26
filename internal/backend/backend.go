@@ -10,6 +10,10 @@ type Reader interface {
 	GetSettings(connectionID string) (domain.ConnectionSettings, error)
 	Hostname() (string, error)
 	Permissions() (domain.Permissions, error)
+	WifiEnabled() (bool, error)
+	// NMState reports NetworkManager's overall state; an error means the
+	// daemon is unreachable.
+	NMState() (domain.NMState, error)
 }
 
 type Watcher interface {

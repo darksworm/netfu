@@ -40,8 +40,8 @@ func TestSystem_SpaceOnWifiRadioRowTogglesRadioOffAndOn(t *testing.T) {
 func TestSystem_ShowsNMStateLineWithStartHintWhenUnreachable(t *testing.T) {
 	f := fake.SeedArchLaptop()
 	m := loadSystem(t, New(f))
-	if view := m.View(); !strings.Contains(view, "NetworkManager:          running") {
-		t.Errorf("the System tab should show NM as running, got:\n%s", view)
+	if view := m.View(); !strings.Contains(view, "NetworkManager:          connected") {
+		t.Errorf("the System tab should show NM's state, got:\n%s", view)
 	}
 
 	f.Errs["Hostname"] = errors.New("dbus: no such service")
@@ -74,4 +74,19 @@ func pressAndDeliver(m Model, msg tea.Msg) Model {
 		m, _ = m.Update(cmd())
 	}
 	return m
+}
+
+func TestSystem_ReadsRadioAndNMStateFromBackendInsteadOfAssuming(t *testing.T) {
+	f := fake.SeedArchLaptop()
+	f.WifiOn = false
+	f.NMStateValue = "disconnected"
+	m := loadSystem(t, New(f))
+
+	view := m.View()
+	if !strings.Contains(view, "Wi-Fi radio:             off") {
+		t.Errorf("the radio row should show the backend's off state, got:\n%s", view)
+	}
+	if !strings.Contains(view, "NetworkManager:          disconnected") {
+		t.Errorf("the NM line should show the backend's reported state, got:\n%s", view)
+	}
 }

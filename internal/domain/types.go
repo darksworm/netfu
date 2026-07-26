@@ -65,3 +65,15 @@ type JoinRequest struct {
 }
 
 type Permissions map[string]bool
+
+// NMState is NetworkManager's overall state, collapsed to what the UI
+// distinguishes.
+type NMState string
+
+const (
+	NMStateUnknown      NMState = "unknown"
+	NMStateAsleep       NMState = "asleep"
+	NMStateDisconnected NMState = "disconnected"
+	NMStateConnecting   NMState = "connecting"
+	NMStateConnected    NMState = "connected"
+)

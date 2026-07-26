@@ -123,3 +123,17 @@ func TestHostnameAndPermissions_AreReadable(t *testing.T) {
 		t.Errorf("expected network-control permission key, got %v", perms)
 	}
 }
+
+func TestWifiEnabledAndNMState_AreReadable(t *testing.T) {
+	a := newAdapter(t)
+	if _, err := a.WifiEnabled(); err != nil {
+		t.Errorf("WifiEnabled(): %v", err)
+	}
+	state, err := a.NMState()
+	if err != nil {
+		t.Fatalf("NMState(): %v", err)
+	}
+	if state == domain.NMStateUnknown {
+		t.Errorf("NMState() = %q on a running NM", state)
+	}
+}

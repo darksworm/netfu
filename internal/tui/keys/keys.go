@@ -44,6 +44,7 @@ func (l List) FullHelp() [][]key.Binding {
 type Devices struct {
 	List
 	Enter      key.Binding
+	Info       key.Binding
 	Activate   key.Binding
 	Deactivate key.Binding
 	Filter     key.Binding
@@ -55,6 +56,10 @@ func DefaultDevices() Devices {
 		Enter: key.NewBinding(
 			key.WithKeys("enter"),
 			key.WithHelp("↵", "activate/deactivate"),
+		),
+		Info: key.NewBinding(
+			key.WithKeys("i"),
+			key.WithHelp("i", "info"),
 		),
 		Activate: key.NewBinding(
 			key.WithKeys("a"),
@@ -76,7 +81,7 @@ func (d Devices) ShortHelp() []key.Binding {
 }
 
 func (d Devices) FullHelp() [][]key.Binding {
-	return append(d.List.FullHelp(), []key.Binding{d.Enter, d.Activate, d.Deactivate, d.Filter})
+	return append(d.List.FullHelp(), []key.Binding{d.Enter, d.Info, d.Activate, d.Deactivate, d.Filter})
 }
 
 type Wifi struct {
