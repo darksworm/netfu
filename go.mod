@@ -6,7 +6,9 @@ require (
 	charm.land/bubbles/v2 v2.1.1
 	charm.land/bubbletea/v2 v2.0.8
 	charm.land/lipgloss/v2 v2.0.5
+	github.com/Wifx/gonetworkmanager/v3 v3.2.0
 	github.com/charmbracelet/x/exp/teatest/v2 v2.0.0-20260726004341-482a56510f1b
+	github.com/godbus/dbus/v5 v5.1.0
 )
 
 require (
