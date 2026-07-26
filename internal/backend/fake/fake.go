@@ -103,8 +103,10 @@ func (f *Fake) Hostname() (string, error) {
 	return f.HostnameValue, nil
 }
 
+// Permissions is logged to Calls, unlike the other readers, so tests can
+// assert it is queried once and cached.
 func (f *Fake) Permissions() (domain.Permissions, error) {
-	if err := f.Errs["Permissions"]; err != nil {
+	if err := f.record("Permissions"); err != nil {
 		return nil, err
 	}
 	return f.Perms, nil

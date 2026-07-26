@@ -8,6 +8,7 @@ import (
 
 	"charm.land/bubbles/v2/key"
 	tea "charm.land/bubbletea/v2"
+	"charm.land/lipgloss/v2"
 
 	"github.com/ilmars/netfu/internal/backend"
 	"github.com/ilmars/netfu/internal/domain"
@@ -21,6 +22,8 @@ type Model struct {
 	devices []domain.Device
 	cursor  int
 	err     error
+	width   int
+	height  int
 }
 
 type devicesLoadedMsg struct {
@@ -47,6 +50,10 @@ func (m Model) loadDevices() tea.Msg {
 	return devicesLoadedMsg{devices: managed, err: err}
 }
 
+func (m Model) Keys() keys.List {
+	return m.keys
+}
+
 func (m Model) Selected() domain.Device {
 	if len(m.devices) == 0 {
 		return domain.Device{}
@@ -59,7 +66,15 @@ func (m Model) Update(msg tea.Msg) (Model, tea.Cmd) {
 	case devicesLoadedMsg:
 		m.devices = msg.devices
 		m.err = msg.err
-		m.cursor = 0
+		// Reloads happen live; keep the user's place, only clamping if the
+		// list shrank.
+		if m.cursor >= len(m.devices) {
+			m.cursor = max(len(m.devices)-1, 0)
+		}
+		return m, nil
+	case tea.WindowSizeMsg:
+		m.width = msg.Width
+		m.height = msg.Height
 		return m, nil
 	case tea.KeyPressMsg:
 		return m.handleKey(msg), nil
@@ -88,15 +103,24 @@ func (m Model) handleKey(msg tea.KeyPressMsg) Model {
 }
 
 func (m Model) View() string {
-	var b strings.Builder
-	b.WriteString(style.Title.Render("Devices") + "\n")
+	var lines []string
+	lines = append(lines, style.Title.Render("Devices"))
 	for i, d := range m.devices {
 		row := fmt.Sprintf("%s  %s  %s  %s", d.Name, d.Type, d.State, d.ActiveConnection)
 		if i == m.cursor {
-			b.WriteString("▸ " + style.Selected.Render(row) + "\n")
+			lines = append(lines, "▸ "+style.Selected.Render(row))
 		} else {
-			b.WriteString("  " + row + "\n")
+			lines = append(lines, "  "+row)
 		}
 	}
-	return b.String()
+	if m.height > 0 && len(lines) > m.height {
+		lines = lines[:m.height]
+	}
+	if m.width > 0 {
+		clip := lipgloss.NewStyle().MaxWidth(m.width)
+		for i, line := range lines {
+			lines[i] = clip.Render(line)
+		}
+	}
+	return strings.Join(lines, "\n") + "\n"
 }

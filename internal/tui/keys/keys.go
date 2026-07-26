@@ -32,15 +32,36 @@ func DefaultList() List {
 	}
 }
 
+func (l List) ShortHelp() []key.Binding {
+	return []key.Binding{l.Up, l.Down}
+}
+
+func (l List) FullHelp() [][]key.Binding {
+	return [][]key.Binding{{l.Up, l.Down, l.Top, l.Bottom}}
+}
+
 type Global struct {
+	Help key.Binding
 	Quit key.Binding
 }
 
 func DefaultGlobal() Global {
 	return Global{
+		Help: key.NewBinding(
+			key.WithKeys("?"),
+			key.WithHelp("?", "help"),
+		),
 		Quit: key.NewBinding(
 			key.WithKeys("q"),
 			key.WithHelp("q", "quit"),
 		),
 	}
+}
+
+func (g Global) ShortHelp() []key.Binding {
+	return []key.Binding{g.Help, g.Quit}
+}
+
+func (g Global) FullHelp() [][]key.Binding {
+	return [][]key.Binding{{g.Help, g.Quit}}
 }
