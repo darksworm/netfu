@@ -1,6 +1,8 @@
 package tui
 
 import (
+	"errors"
+	"fmt"
 	"strings"
 	"testing"
 
@@ -63,6 +65,28 @@ func displayColumn(line, sub string) int {
 		return -1
 	}
 	return lipgloss.Width(line[:i])
+}
+
+func TestWifi_ListScrollsSoTheCursorRowStaysVisible(t *testing.T) {
+	f := fake.SeedArchLaptop()
+	for i := range 30 {
+		f.APList = append(f.APList, domain.AccessPoint{
+			SSID: fmt.Sprintf("Mesh %02d", i), Strength: uint8(30 - i%20),
+			BSSID: fmt.Sprintf("AA:BB:CC:99:99:%02d", i), Security: domain.SecurityWPA2,
+		})
+	}
+	p := newPump(t, New(f))
+	p.send(tea.WindowSizeMsg{Width: 80, Height: 24})
+
+	p.send(keyPress('G'))
+
+	selected := p.app().wifi.Selected().SSID
+	if selected == "" {
+		t.Fatal("precondition: G should land on the weakest network")
+	}
+	if view := p.view(); !strings.Contains(view, selected) {
+		t.Errorf("the list should scroll so the cursor row %q is visible, got:\n%s", selected, view)
+	}
 }
 
 func TestWifi_ScanResultsRenderDedupedSortedWithSignalBars(t *testing.T) {
@@ -202,6 +226,23 @@ func TestWifi_EnterOnKnownNetworkActivatesSavedProfileWithoutPrompt(t *testing.T
 	}
 	if len(f.JoinCalls) != 0 {
 		t.Errorf("a saved WPA3 network must not go through JoinWifi (no password prompt), got %+v", f.JoinCalls)
+	}
+}
+
+func TestWifi_FailedActivationShowsTheBackendErrorOnTheStatusLine(t *testing.T) {
+	f := fake.SeedArchLaptop()
+	f.Errs["Activate"] = errors.New("profile is not compatible with device (mismatching interface name)")
+	p := newPump(t, New(f))
+
+	p.send(keyPress('j'))
+	p.send(tea.KeyPressMsg{Code: tea.KeyEnter})
+
+	view := p.view()
+	if !strings.Contains(view, "✗ connect Our House 5G: profile is not compatible") {
+		t.Errorf("a failed activation must surface NM's error, got:\n%s", view)
+	}
+	if strings.Contains(view, "Connecting to") {
+		t.Errorf("the connecting spinner should clear on failure, got:\n%s", view)
 	}
 }
 

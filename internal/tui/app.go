@@ -317,6 +317,8 @@ func (a App) activeOverlay() string {
 		return a.wifi.Overlay()
 	case tabDevices:
 		return a.devices.Overlay()
+	case tabConnections:
+		return a.conns.Overlay()
 	}
 	return ""
 }

@@ -465,14 +465,24 @@ func (m Model) View() string {
 		lines = append(lines, style.Faint.Render("🔒 edit · delete · new — not permitted (polkit)"))
 	}
 	selected := m.Selected()
+	focus := 0
 	for _, g := range m.groups() {
 		lines = append(lines, "─ "+g.label+" ─")
 		for _, c := range g.conns {
+			if c.ID == selected.ID {
+				focus = len(lines)
+			}
 			lines = append(lines, m.renderRow(c, c.ID == selected.ID))
 		}
 	}
-	if m.modal != nil {
-		lines = append(lines, strings.Split(m.modal.View(), "\n")...)
+	return style.FitScrolled(lines, m.width, m.height, focus)
+}
+
+// Overlay is the open confirm's view, layered by the root model over the
+// dimmed list; empty when no modal is open.
+func (m Model) Overlay() string {
+	if m.modal == nil {
+		return ""
 	}
-	return style.Fit(lines, m.width, m.height)
+	return m.modal.View()
 }

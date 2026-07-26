@@ -1,6 +1,7 @@
 package tui
 
 import (
+	"fmt"
 	"reflect"
 	"slices"
 	"strings"
@@ -60,6 +61,43 @@ func TestEditor_ListShowsAllProfilesGroupedByType(t *testing.T) {
 	}
 	if never := lineContaining(t, view, "Work VPN"); !strings.Contains(never, "never") {
 		t.Errorf("a never-used profile should say so, got: %q", never)
+	}
+}
+
+func TestEditor_DeleteConfirmOverlaysEvenWhenTheListOverflowsThePane(t *testing.T) {
+	f := seedProfiles()
+	for i := range 30 {
+		f.ConnectionList = append(f.ConnectionList,
+			domain.Connection{ID: fmt.Sprintf("wifi-%d", i), Name: fmt.Sprintf("Cafe %d", i), Type: "802-11-wireless"})
+	}
+	p := newPump(t, New(f))
+	p.send(tea.WindowSizeMsg{Width: 80, Height: 24})
+
+	p.send(keyPress('3'))
+	p.send(keyPress('x'))
+
+	if view := p.view(); !strings.Contains(view, "Delete Our House 1?") {
+		t.Fatalf("the delete confirm must overlay the list, not render below the fold, got:\n%s", view)
+	}
+}
+
+func TestEditor_ListScrollsSoTheCursorRowStaysVisible(t *testing.T) {
+	f := seedProfiles()
+	for i := range 30 {
+		f.ConnectionList = append(f.ConnectionList,
+			domain.Connection{ID: fmt.Sprintf("wifi-%d", i), Name: fmt.Sprintf("Cafe %d", i), Type: "802-11-wireless"})
+	}
+	p := newPump(t, New(f))
+	p.send(tea.WindowSizeMsg{Width: 80, Height: 24})
+
+	p.send(keyPress('3'))
+	p.send(keyPress('G'))
+
+	if got := p.app().conns.Selected().Name; got != "docker0" {
+		t.Fatalf("precondition: G should select the last profile, got %q", got)
+	}
+	if view := p.view(); !strings.Contains(view, "docker0") {
+		t.Errorf("the list should scroll so the cursor row is visible, got:\n%s", view)
 	}
 }
 

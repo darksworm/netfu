@@ -61,8 +61,18 @@ func ResolveSelected(isDark bool) {
 // Fit renders a screen's lines into its pane: truncated to height and
 // clipped to width, zero meaning unconstrained.
 func Fit(lines []string, width, height int) string {
+	return FitScrolled(lines, width, height, 0)
+}
+
+// FitScrolled is Fit with a focus line that must stay visible: when the
+// lines overflow the pane, the window slides just far enough to include it.
+func FitScrolled(lines []string, width, height, focus int) string {
 	if height > 0 && len(lines) > height {
-		lines = lines[:height]
+		start := 0
+		if focus >= height {
+			start = focus - height + 1
+		}
+		lines = lines[start : start+height]
 	}
 	if width > 0 {
 		clip := lipgloss.NewStyle().MaxWidth(width)

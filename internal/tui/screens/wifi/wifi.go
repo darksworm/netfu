@@ -58,7 +58,8 @@ type scanRequestedMsg struct {
 }
 
 type connectResultMsg struct {
-	err error
+	ssid string
+	err  error
 }
 
 type Model struct {
@@ -220,6 +221,7 @@ func (m Model) Update(msg tea.Msg) (Model, tea.Cmd) {
 	case connectResultMsg:
 		if msg.err != nil {
 			m.connecting = ""
+			m.notice = fmt.Sprintf("✗ connect %s: %v", msg.ssid, msg.err)
 		}
 		return m, nil
 	case tea.BackgroundColorMsg:
@@ -425,7 +427,7 @@ func (m Model) join(req domain.JoinRequest) (Model, tea.Cmd) {
 	m.lastJoin = req
 	m.notice = ""
 	return m, func() tea.Msg {
-		return connectResultMsg{err: m.backend.JoinWifi(req)}
+		return connectResultMsg{ssid: req.SSID, err: m.backend.JoinWifi(req)}
 	}
 }
 
@@ -473,8 +475,10 @@ func (m Model) connectSelected() (Model, tea.Cmd) {
 	}
 	if profile, ok := m.savedProfileFor(ap.SSID); ok {
 		m.connecting = ap.SSID
+		ssid := ap.SSID
 		return m, func() tea.Msg {
-			return connectResultMsg{err: m.backend.Activate(profile.ConnectionID, m.wifiDevice)}
+			err := m.backend.Activate(profile.ConnectionID, m.wifiDevice)
+			return connectResultMsg{ssid: ssid, err: err}
 		}
 	}
 	if ap.Security == domain.SecurityOpen {
@@ -630,9 +634,11 @@ func (m Model) View() string {
 		lines = append(lines, "/"+m.filter)
 	}
 	list := m.list()
+	focus := 0
 	for i, ap := range list.InRange {
 		row := m.renderRow(ap)
 		if i == m.cursor {
+			focus = len(lines)
 			row = style.SelectedRow(row, m.width)
 		}
 		lines = append(lines, row)
@@ -653,5 +659,5 @@ func (m Model) View() string {
 	if len(lines) == 0 {
 		return ""
 	}
-	return style.Fit(lines, m.width, m.height)
+	return style.FitScrolled(lines, m.width, m.height, focus)
 }
