@@ -47,6 +47,7 @@ type ActiveConnection struct {
 type AccessPoint struct {
 	SSID     string
 	Strength uint8
+	BSSID    string
 }
 
 // ConnectionSettings mirrors NM's a{sa{sv}} shape without leaking dbus types.
