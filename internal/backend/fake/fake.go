@@ -21,8 +21,16 @@ type Fake struct {
 	Errs map[string]error
 	// Calls records every mutator call for assertions.
 	Calls []string
+	// JoinCalls and ActivateCalls capture mutator arguments for assertions.
+	JoinCalls     []domain.JoinRequest
+	ActivateCalls []ActivateCall
 
 	events chan domain.Event
+}
+
+type ActivateCall struct {
+	ConnectionID string
+	DeviceName   string
 }
 
 var _ backend.Backend = (*Fake)(nil)
@@ -49,6 +57,26 @@ func SeedArchLaptop() *Fake {
 	f.ActiveList = []domain.ActiveConnection{
 		{ID: "our-house-1", Name: "Our House 1", DeviceName: "wlan0", State: domain.DeviceStateConnected},
 		{ID: "docker0", Name: "docker0", DeviceName: "docker0", State: domain.DeviceStateConnected},
+	}
+	f.ConnectionList = []domain.Connection{
+		{ID: "our-house-1", Name: "Our House 1", Type: "802-11-wireless"},
+		{ID: "our-house-5g", Name: "Our House 5G", Type: "802-11-wireless"},
+		{ID: "summer-house", Name: "Summer House", Type: "802-11-wireless"},
+		{ID: "docker0", Name: "docker0", Type: "bridge"},
+	}
+	for _, wifi := range f.ConnectionList[:3] {
+		f.SettingsByID[wifi.ID] = domain.ConnectionSettings{
+			"connection":      {"id": wifi.Name, "uuid": wifi.ID, "type": wifi.Type},
+			"802-11-wireless": {"ssid": wifi.Name},
+		}
+	}
+	f.APList = []domain.AccessPoint{
+		{SSID: "Our House 1", Strength: 82, BSSID: "AA:BB:CC:11:11:11", Security: domain.SecurityWPA2},
+		{SSID: "Neighbors", Strength: 68, BSSID: "AA:BB:CC:33:33:33", Security: domain.SecurityWPA2},
+		{SSID: "Our House 1", Strength: 55, BSSID: "AA:BB:CC:22:22:22", Security: domain.SecurityWPA2},
+		{SSID: "Our House 5G", Strength: 61, BSSID: "AA:BB:CC:55:55:55", Security: domain.SecurityWPA3},
+		{SSID: "CafeGuest", Strength: 47, BSSID: "AA:BB:CC:44:44:44", Security: domain.SecurityOpen},
+		{SSID: "", Strength: 33, BSSID: "AA:BB:CC:66:66:66", Security: domain.SecurityWPA2},
 	}
 	f.HostnameValue = "archbook"
 	return f
@@ -119,6 +147,7 @@ func (f *Fake) Events() <-chan domain.Event {
 }
 
 func (f *Fake) Activate(connectionID, deviceName string) error {
+	f.ActivateCalls = append(f.ActivateCalls, ActivateCall{ConnectionID: connectionID, DeviceName: deviceName})
 	f.Calls = append(f.Calls, fmt.Sprintf("Activate(%s,%s)", connectionID, deviceName))
 	return f.Errs["Activate"]
 }
@@ -129,6 +158,7 @@ func (f *Fake) Deactivate(activeConnectionID string) error {
 }
 
 func (f *Fake) JoinWifi(req domain.JoinRequest) error {
+	f.JoinCalls = append(f.JoinCalls, req)
 	return f.record("JoinWifi")
 }
 

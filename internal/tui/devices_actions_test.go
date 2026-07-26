@@ -18,6 +18,7 @@ func TestDevices_ActivateSavedProfileOnDisconnectedEthernet(t *testing.T) {
 		domain.Connection{ID: "wired-1", Name: "Wired 1", Type: "802-3-ethernet"})
 	p := newPump(t, New(f))
 
+	p.send(keyPress('2'))
 	p.send(keyPress('j'))
 	p.send(keyPress('a'))
 
@@ -52,6 +53,7 @@ func TestDevices_EnterOnConnectedEthernetOffersDeactivate(t *testing.T) {
 	f := seedWiredConnected()
 	p := newPump(t, New(f))
 
+	p.send(keyPress('2'))
 	p.send(keyPress('j'))
 	if got := p.app().devices.Selected().Name; got != "enp0s31f6" {
 		t.Fatalf("precondition: cursor should be on enp0s31f6, got %q", got)

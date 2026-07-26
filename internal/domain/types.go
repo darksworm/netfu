@@ -48,6 +48,7 @@ type AccessPoint struct {
 	SSID     string
 	Strength uint8
 	BSSID    string
+	Security Security
 }
 
 // ConnectionSettings mirrors NM's a{sa{sv}} shape without leaking dbus types.
@@ -56,7 +57,7 @@ type ConnectionSettings = map[string]map[string]any
 type JoinRequest struct {
 	SSID     string
 	Hidden   bool
-	Security string
+	Security Security
 	PSK      string
 }
 

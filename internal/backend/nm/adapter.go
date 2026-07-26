@@ -43,7 +43,7 @@ func New() (*Adapter, error) {
 		settings:    settings,
 		deviceNames: map[dbus.ObjectPath]string{},
 	}
-	a.watcher, err = newWatcher(conn, a.deviceName)
+	a.watcher, err = newWatcher(conn, a.deviceName, apSSID)
 	if err != nil {
 		return nil, fmt.Errorf("subscribe to NetworkManager signals: %w", err)
 	}
@@ -71,6 +71,20 @@ func (a *Adapter) deviceName(path dbus.ObjectPath) string {
 	}
 	a.rememberDevice(path, name)
 	return name
+}
+
+// apSSID resolves the AP a strength signal is about. Strength events are
+// gated to one per second per AP, so the extra property read stays cheap.
+func apSSID(path dbus.ObjectPath) string {
+	ap, err := gonm.NewAccessPoint(path)
+	if err != nil {
+		return ""
+	}
+	ssid, err := ap.GetPropertySSID()
+	if err != nil {
+		return ""
+	}
+	return ssid
 }
 
 func (a *Adapter) rememberDevice(path dbus.ObjectPath, name string) {
@@ -188,15 +202,11 @@ func (a *Adapter) AccessPoints() ([]domain.AccessPoint, error) {
 			return nil, err
 		}
 		for _, ap := range nmAPs {
-			ssid, err := ap.GetPropertySSID()
-			if err != nil {
+			converted, ok := accessPointFromNM(ap)
+			if !ok {
 				continue // APs can vanish between listing and reading
 			}
-			strength, err := ap.GetPropertyStrength()
-			if err != nil {
-				continue
-			}
-			aps = append(aps, domain.AccessPoint{SSID: ssid, Strength: strength})
+			aps = append(aps, converted)
 		}
 	}
 	return aps, nil
@@ -330,11 +340,11 @@ func (a *Adapter) JoinWifi(req domain.JoinRequest) error {
 	return err
 }
 
-func keyMgmtFor(security string) string {
+func keyMgmtFor(security domain.Security) string {
 	switch security {
-	case "", "open", "none":
+	case "", domain.SecurityOpen:
 		return ""
-	case "sae", "wpa3":
+	case domain.SecurityWPA3:
 		return "sae"
 	default:
 		return "wpa-psk"

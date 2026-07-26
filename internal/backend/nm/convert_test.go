@@ -1,6 +1,7 @@
 package nm
 
 import (
+	"errors"
 	"testing"
 
 	gonm "github.com/Wifx/gonetworkmanager/v3"
@@ -100,6 +101,62 @@ func TestReasonFromNM_NamesTheWrongPasswordReasonsStably(t *testing.T) {
 		t.Errorf("none reason = %q, want empty", got)
 	}
 }
+
+// stubAccessPoint overrides just the properties accessPointFromNM reads;
+// anything else panics via the embedded nil interface.
+type stubAccessPoint struct {
+	gonm.AccessPoint
+	ssid     string
+	strength uint8
+	bssid    string
+	flags    uint32
+	wpaFlags uint32
+	rsnFlags uint32
+	err      error
+}
+
+func (s stubAccessPoint) GetPropertySSID() (string, error)      { return s.ssid, s.err }
+func (s stubAccessPoint) GetPropertyStrength() (uint8, error)   { return s.strength, s.err }
+func (s stubAccessPoint) GetPropertyHWAddress() (string, error) { return s.bssid, s.err }
+func (s stubAccessPoint) GetPropertyFlags() (uint32, error)     { return s.flags, s.err }
+func (s stubAccessPoint) GetPropertyWPAFlags() (uint32, error)  { return s.wpaFlags, s.err }
+func (s stubAccessPoint) GetPropertyRSNFlags() (uint32, error)  { return s.rsnFlags, s.err }
+
+func TestAccessPointFromNM_PopulatesBSSIDAndClassifiedSecurity(t *testing.T) {
+	// NM_802_11_AP_FLAGS_PRIVACY with RSN PSK key management: a WPA2 network.
+	stub := stubAccessPoint{
+		ssid:     "Our House 1",
+		strength: 82,
+		bssid:    "AA:BB:CC:11:22:33",
+		flags:    0x1,
+		rsnFlags: 0x100,
+	}
+
+	ap, ok := accessPointFromNM(stub)
+
+	if !ok {
+		t.Fatal("a readable AP should convert")
+	}
+	want := domain.AccessPoint{
+		SSID:     "Our House 1",
+		Strength: 82,
+		BSSID:    "AA:BB:CC:11:22:33",
+		Security: domain.SecurityWPA2,
+	}
+	if ap != want {
+		t.Errorf("accessPointFromNM = %+v, want %+v", ap, want)
+	}
+}
+
+func TestAccessPointFromNM_ReportsNotOKWhenTheAPVanishedMidRead(t *testing.T) {
+	stub := stubAccessPoint{ssid: "gone", err: errAPVanished}
+
+	if _, ok := accessPointFromNM(stub); ok {
+		t.Error("an AP whose properties fail to read should be skipped, not returned half-filled")
+	}
+}
+
+var errAPVanished = errors.New("object does not exist")
 
 func TestSettingsFromNM_TurnsSSIDBytesIntoAString(t *testing.T) {
 	in := gonm.ConnectionSettings{

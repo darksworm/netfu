@@ -84,9 +84,10 @@ type watcher struct {
 	nonEmpty chan struct{}
 
 	deviceNames func(path dbus.ObjectPath) string
+	apSSID      func(path dbus.ObjectPath) string
 }
 
-func newWatcher(conn *dbus.Conn, deviceNames func(dbus.ObjectPath) string) (*watcher, error) {
+func newWatcher(conn *dbus.Conn, deviceNames, apSSID func(dbus.ObjectPath) string) (*watcher, error) {
 	w := &watcher{
 		conn:        conn,
 		out:         make(chan domain.Event, 64),
@@ -94,6 +95,7 @@ func newWatcher(conn *dbus.Conn, deviceNames func(dbus.ObjectPath) string) (*wat
 		buffer:      newEventBuffer(64),
 		nonEmpty:    make(chan struct{}, 1),
 		deviceNames: deviceNames,
+		apSSID:      apSSID,
 	}
 
 	// One raw match per signal family, all paths at once, so devices and
@@ -189,16 +191,20 @@ func (w *watcher) eventForPropertiesChanged(s *dbus.Signal) (domain.Event, bool)
 	changed, _ := s.Body[1].(map[string]dbus.Variant)
 	switch iface {
 	case apInterface:
-		if _, ok := changed["Strength"]; ok {
-			return domain.Event{Kind: domain.EventAPStrength}, true
+		if v, ok := changed["Strength"]; ok {
+			strength, _ := v.Value().(byte)
+			return domain.Event{
+				Kind:     domain.EventAPStrength,
+				SSID:     w.apSSID(s.Path),
+				Strength: strength,
+			}, true
 		}
 	case wirelessInterface:
 		// A LastScan bump means fresh scan results are ready to re-read.
 		if _, ok := changed["LastScan"]; ok {
 			return domain.Event{
-				Kind:       domain.EventAPStrength,
+				Kind:       domain.EventAPListChanged,
 				DeviceName: w.deviceNames(s.Path),
-				Reason:     "last-scan",
 			}, true
 		}
 	}

@@ -62,6 +62,41 @@ func activeStateFromNM(s gonm.NmActiveConnectionState) domain.DeviceState {
 	}
 }
 
+// accessPointFromNM reads one scanned AP's properties; not-ok means the AP
+// vanished between listing and reading and should be skipped.
+func accessPointFromNM(ap gonm.AccessPoint) (domain.AccessPoint, bool) {
+	ssid, err := ap.GetPropertySSID()
+	if err != nil {
+		return domain.AccessPoint{}, false
+	}
+	strength, err := ap.GetPropertyStrength()
+	if err != nil {
+		return domain.AccessPoint{}, false
+	}
+	bssid, err := ap.GetPropertyHWAddress()
+	if err != nil {
+		return domain.AccessPoint{}, false
+	}
+	flags, err := ap.GetPropertyFlags()
+	if err != nil {
+		return domain.AccessPoint{}, false
+	}
+	wpaFlags, err := ap.GetPropertyWPAFlags()
+	if err != nil {
+		return domain.AccessPoint{}, false
+	}
+	rsnFlags, err := ap.GetPropertyRSNFlags()
+	if err != nil {
+		return domain.AccessPoint{}, false
+	}
+	return domain.AccessPoint{
+		SSID:     ssid,
+		Strength: strength,
+		BSSID:    bssid,
+		Security: domain.ClassifySecurity(flags, wpaFlags, rsnFlags),
+	}, true
+}
+
 // settingsFromNM converts a decoded NM settings map to the domain shape.
 // NM sends SSIDs as byte arrays ("ay") because SSIDs are not guaranteed to
 // be UTF-8; the app treats them as strings.

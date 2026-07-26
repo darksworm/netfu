@@ -13,17 +13,84 @@ import (
 	"github.com/ilmars/netfu/internal/domain"
 )
 
-func TestApp_StartsOnDeviceListAndQQuits(t *testing.T) {
+func TestApp_StartsOnWifiTabAndQQuits(t *testing.T) {
 	f := fake.SeedArchLaptop()
 	p := newPump(t, New(f))
 
-	if view := p.view(); !strings.Contains(view, "Devices") {
-		t.Errorf("landing view should show the Devices screen, got:\n%s", view)
+	view := p.view()
+	if !strings.Contains(view, "[1] Wi-Fi") || !strings.Contains(view, "[2] Devices") {
+		t.Errorf("landing view should show the tab bar, got:\n%s", view)
+	}
+	if p.app().tab != tabWifi {
+		t.Errorf("the app should land on the Wi-Fi tab, got tab %d", p.app().tab)
+	}
+	if strings.Contains(view, "enp0s31f6") {
+		t.Errorf("the Wi-Fi tab should not render the device list, got:\n%s", view)
 	}
 
 	p.send(keyPress('q'))
 	if !containsQuit(p.msgs) {
 		t.Errorf("pressing q at top level should quit, got msgs: %#v", p.msgs)
+	}
+}
+
+func TestApp_DevicesTabShowsDeviceListAndQQuits(t *testing.T) {
+	f := fake.SeedArchLaptop()
+	p := newPump(t, New(f))
+
+	p.send(keyPress('2'))
+	if view := p.view(); !strings.Contains(view, "enp0s31f6") {
+		t.Errorf("the Devices tab should show the device list, got:\n%s", view)
+	}
+
+	p.send(keyPress('q'))
+	if !containsQuit(p.msgs) {
+		t.Errorf("pressing q at top level should quit, got msgs: %#v", p.msgs)
+	}
+}
+
+func TestApp_NumberKeysAndBracketsSwitchTabs(t *testing.T) {
+	f := fake.SeedArchLaptop()
+	p := newPump(t, New(f))
+
+	p.send(keyPress('3'))
+	if p.app().tab != tabConnections {
+		t.Errorf("3 should open the Connections tab, got tab %d", p.app().tab)
+	}
+	if view := p.view(); !strings.Contains(view, "coming soon") {
+		t.Errorf("Connections tab should show its placeholder, got:\n%s", view)
+	}
+
+	p.send(keyPress(']'))
+	if p.app().tab != tabSystem {
+		t.Errorf("] should move to the next tab, got tab %d", p.app().tab)
+	}
+
+	p.send(keyPress(']'))
+	if p.app().tab != tabWifi {
+		t.Errorf("] on the last tab should wrap to Wi-Fi, got tab %d", p.app().tab)
+	}
+
+	p.send(keyPress('['))
+	if p.app().tab != tabSystem {
+		t.Errorf("[ on the first tab should wrap to System, got tab %d", p.app().tab)
+	}
+}
+
+func TestApp_TabStatePersistsAcrossSwitches(t *testing.T) {
+	f := fake.SeedArchLaptop()
+	p := newPump(t, New(f))
+
+	p.send(keyPress('2'))
+	p.send(keyPress('j'))
+	if got := p.app().devices.Selected().Name; got != "enp0s31f6" {
+		t.Fatalf("precondition: cursor should be on enp0s31f6, got %q", got)
+	}
+
+	p.send(keyPress('1'))
+	p.send(keyPress('2'))
+	if got := p.app().devices.Selected().Name; got != "enp0s31f6" {
+		t.Errorf("returning to the Devices tab should keep its cursor, got %q", got)
 	}
 }
 
@@ -111,6 +178,7 @@ func TestDevices_DeviceStateEventUpdatesRowLive(t *testing.T) {
 	f := fake.SeedArchLaptop()
 	p := newPump(t, New(f))
 
+	p.send(keyPress('2'))
 	p.send(keyPress('j'))
 	if got := p.app().devices.Selected().Name; got != "enp0s31f6" {
 		t.Fatalf("precondition: cursor should be on enp0s31f6, got %q", got)
