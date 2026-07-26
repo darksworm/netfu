@@ -288,14 +288,19 @@ func (m Model) View() string {
 	if m.showDetail {
 		return m.detailView()
 	}
-	const columns = "%-12s  %-10s  %-14s  %s"
+	// Fixed columns: gutter, TYPE, STATE and their gaps; DEVICE and
+	// CONNECTION split what remains, DEVICE trimmed when it doesn't fit.
+	nameWidth := style.FlexCell(m.width, 48, 12)
+	row := func(name, typ, state, conn string) string {
+		return fmt.Sprintf("%s  %-10s  %-14s  %s", style.Cell(name, nameWidth), typ, state, conn)
+	}
 	var lines []string
-	lines = append(lines, style.Faint.Render("  "+fmt.Sprintf(columns, "DEVICE", "TYPE", "STATE", "CONNECTION")))
+	lines = append(lines, style.Faint.Render("  "+row("DEVICE", "TYPE", "STATE", "CONNECTION")))
 	if m.filtering || m.filter != "" {
 		lines = append(lines, "/"+m.filter)
 	}
 	for i, d := range m.visible() {
-		row := fmt.Sprintf(columns, d.Name, d.Type, d.State, d.ActiveConnection)
+		row := row(d.Name, string(d.Type), string(d.State), d.ActiveConnection)
 		if i == m.cursor {
 			lines = append(lines, style.SelectedRow("▸ "+row, m.width))
 		} else {

@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	tea "charm.land/bubbletea/v2"
+	"charm.land/lipgloss/v2"
 
 	"github.com/ilmars/netfu/internal/backend/fake"
 	"github.com/ilmars/netfu/internal/domain"
@@ -61,6 +62,37 @@ func TestDevices_ListHasColumnHeaderWithAlignedColumns(t *testing.T) {
 	}
 	if got, want := strings.LastIndex(docker, "docker0"), strings.Index(header, "CONNECTION"); got != want {
 		t.Errorf("the connection column should align with its header (col %d vs %d):\n%s\n%s", got, want, header, docker)
+	}
+}
+
+func TestDevices_LongDeviceNamesAreTrimmedToKeepColumnsAligned(t *testing.T) {
+	f := fake.New()
+	f.DeviceList = []domain.Device{
+		{Name: "wlan0", Type: domain.DeviceTypeWifi, State: domain.DeviceStateConnected, Managed: true},
+		{Name: "br-1408b82239ca-with-a-very-long-tail", Type: domain.DeviceTypeBridge, State: domain.DeviceStateConnected, Managed: true},
+	}
+	m := New(f)
+	m, _ = m.Update(tea.WindowSizeMsg{Width: 76, Height: 18})
+	m = loadDevices(t, m)
+
+	lines := strings.Split(ansi.Strip(m.View()), "\n")
+	header, typeCol := lines[0], displayColumn(lines[0], "TYPE")
+	if typeCol < 0 {
+		t.Fatalf("missing TYPE header in %q", header)
+	}
+	sawTruncated := false
+	for _, line := range lines[1:] {
+		for _, typ := range []string{"wifi", "bridge"} {
+			if got := displayColumn(line, typ); got >= 0 && got != typeCol {
+				t.Errorf("every row's type must align with the header (col %d vs %d):\n%s\n%s", got, typeCol, header, line)
+			}
+		}
+		if strings.Contains(line, "…") {
+			sawTruncated = true
+		}
+	}
+	if !sawTruncated {
+		t.Error("an over-long device name should be trimmed with an ellipsis")
 	}
 }
 
@@ -229,4 +261,14 @@ func loadDevices(t *testing.T, m Model) Model {
 	}
 	m, _ = m.Update(cmd())
 	return m
+}
+
+// displayColumn is the terminal cell column where sub starts — byte offsets
+// lie once multibyte glyphs like … or ▸ precede it.
+func displayColumn(line, sub string) int {
+	i := strings.Index(line, sub)
+	if i < 0 {
+		return -1
+	}
+	return lipgloss.Width(line[:i])
 }

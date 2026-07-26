@@ -424,6 +424,12 @@ func lastUsed(c domain.Connection) string {
 	return time.Unix(c.LastUsedUnix, 0).UTC().Format("2006-01-02")
 }
 
+// nameWidth is the flexible NAME column: fixed columns and gaps take the
+// rest, over-long names are trimmed.
+func (m Model) nameWidth() int {
+	return style.FlexCell(m.width, 40, 20)
+}
+
 func (m Model) renderRow(c domain.Connection, selected bool) string {
 	cursor, mark, device := " ", " ", "—"
 	if selected {
@@ -433,8 +439,8 @@ func (m Model) renderRow(c domain.Connection, selected bool) string {
 		mark = "✓"
 		device = ac.DeviceName
 	}
-	row := fmt.Sprintf("%s%s %-20s %-10s %-10s %s",
-		cursor, mark, c.Name, strings.ToLower(typeLabel(c.Type)), device, lastUsed(c))
+	row := fmt.Sprintf("%s%s %s %-10s %-10s %s",
+		cursor, mark, style.Cell(c.Name, m.nameWidth()), strings.ToLower(typeLabel(c.Type)), device, lastUsed(c))
 	if selected {
 		return style.SelectedRow(row, m.width)
 	}
@@ -452,8 +458,8 @@ func (m Model) View() string {
 		return m.pickerView()
 	}
 	lines := []string{
-		style.Title.Render("Connections"),
-		fmt.Sprintf("   %-20s %-10s %-10s %s", "NAME", "TYPE", "DEVICE", "LAST USED"),
+		style.Faint.Render(fmt.Sprintf("   %s %-10s %-10s %s",
+			style.Cell("NAME", m.nameWidth()), "TYPE", "DEVICE", "LAST USED")),
 	}
 	if !m.canModify() {
 		lines = append(lines, style.Faint.Render("🔒 edit · delete · new — not permitted (polkit)"))

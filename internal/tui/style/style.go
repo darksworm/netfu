@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"charm.land/lipgloss/v2"
+	"github.com/charmbracelet/x/ansi"
 )
 
 var (
@@ -15,6 +16,28 @@ var (
 	Selected = lipgloss.NewStyle().Reverse(true)
 	Faint    = lipgloss.NewStyle().Faint(true)
 )
+
+// Cell fits text into a fixed column: over-long content is trimmed with an
+// ellipsis, short content padded, so table columns never drift.
+func Cell(text string, width int) string {
+	if width <= 0 {
+		return text
+	}
+	text = ansi.Truncate(text, width, "…")
+	if gap := width - lipgloss.Width(text); gap > 0 {
+		text += strings.Repeat(" ", gap)
+	}
+	return text
+}
+
+// FlexCell is the width left for a table's flexible column after the fixed
+// ones are allotted, never below min so narrow panes stay readable.
+func FlexCell(total, fixed, min int) int {
+	if total <= 0 {
+		return min
+	}
+	return max(total-fixed, min)
+}
 
 // SelectedRow highlights the cursor row, padding the highlight to the full
 // pane width so the cursor bar spans the terminal.

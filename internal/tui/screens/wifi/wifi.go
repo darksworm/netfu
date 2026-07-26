@@ -534,8 +534,12 @@ func (m Model) renderRow(ap domain.AccessPoint) string {
 	if ssid == "" {
 		ssid = "(hidden)"
 	}
-	return strings.TrimRight(fmt.Sprintf("%s %-24s %s %3d%%  %-7s %s",
-		gutter, ssid, signalBars(ap.Strength), ap.Strength, securityBadge(ap.Security), m.tagFor(ap)), " ")
+	// Fixed tail: gutter+spaces, bars, percent, badge, tag. The SSID gets
+	// whatever is left and is trimmed when it doesn't fit.
+	ssidWidth := style.FlexCell(m.width, 34, 24)
+	return strings.TrimRight(fmt.Sprintf("%s %s %s %3d%%  %-7s %s",
+		gutter, style.Cell(ssid, ssidWidth), signalBars(ap.Strength), ap.Strength,
+		securityBadge(ap.Security), m.tagFor(ap)), " ")
 }
 
 func (m Model) tagFor(ap domain.AccessPoint) string {

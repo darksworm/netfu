@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	tea "charm.land/bubbletea/v2"
+	"charm.land/lipgloss/v2"
 
 	"github.com/ilmars/netfu/internal/backend/fake"
 	"github.com/ilmars/netfu/internal/domain"
@@ -32,6 +33,36 @@ func TestWifi_OpeningScreenTriggersScanAndShowsSpinner(t *testing.T) {
 	if !strings.Contains(view, "Our House 1") {
 		t.Errorf("the screen should load and list the known APs while scanning, got:\n%s", view)
 	}
+}
+
+func TestWifi_LongSSIDIsTrimmedSoColumnsStayAligned(t *testing.T) {
+	f := fake.SeedArchLaptop()
+	f.APList = append(f.APList, domain.AccessPoint{
+		SSID:     "DIRECT-05-HP Smart Tank Plus 650 With An Absurdly Long Broadcast Name",
+		Strength: 37, BSSID: "AA:BB:CC:88:88:88", Security: domain.SecurityWPA2,
+	})
+	p := newPump(t, New(f))
+	p.send(tea.WindowSizeMsg{Width: 80, Height: 24})
+
+	long := lineContaining(t, p.view(), "DIRECT-05-HP")
+	short := lineContaining(t, p.view(), "CafeGuest")
+	if !strings.Contains(long, "…") {
+		t.Errorf("an over-long SSID should be trimmed with an ellipsis, got: %s", long)
+	}
+	if got, want := displayColumn(long, "%"), displayColumn(short, "%"); got != want {
+		t.Errorf("the signal column must stay aligned for long SSIDs (col %d vs %d):\n%s\n%s",
+			got, want, short, long)
+	}
+}
+
+// displayColumn is the terminal cell column where sub starts — byte offsets
+// lie once multibyte glyphs like … or ▸ precede it.
+func displayColumn(line, sub string) int {
+	i := strings.Index(line, sub)
+	if i < 0 {
+		return -1
+	}
+	return lipgloss.Width(line[:i])
 }
 
 func TestWifi_ScanResultsRenderDedupedSortedWithSignalBars(t *testing.T) {
