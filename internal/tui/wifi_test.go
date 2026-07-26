@@ -229,6 +229,38 @@ func TestWifi_EnterOnKnownNetworkActivatesSavedProfileWithoutPrompt(t *testing.T
 	}
 }
 
+func TestWifi_ConnectPrefersTheProfileCompatibleWithTheDevice(t *testing.T) {
+	f := fake.SeedArchLaptop()
+	// Two profiles for the same SSID: a stale one pinned to an interface
+	// from an old machine, and the working one used yesterday.
+	f.ConnectionList = append(f.ConnectionList,
+		domain.Connection{ID: "neighbors-old", Name: "Neighbors", Type: "802-11-wireless", LastUsedUnix: 100},
+		domain.Connection{ID: "neighbors-current", Name: "Neighbors 1", Type: "802-11-wireless", LastUsedUnix: 200},
+	)
+	f.SettingsByID["neighbors-old"] = domain.ConnectionSettings{
+		"connection":      {"id": "Neighbors", "interface-name": "wlp194s0"},
+		"802-11-wireless": {"ssid": "Neighbors"},
+	}
+	f.SettingsByID["neighbors-current"] = domain.ConnectionSettings{
+		"connection":      {"id": "Neighbors 1"},
+		"802-11-wireless": {"ssid": "Neighbors"},
+	}
+	p := newPump(t, New(f))
+
+	p.send(keyPress('j'))
+	if got := p.app().wifi.Selected().SSID; got != "Neighbors" {
+		t.Fatalf("precondition: cursor should be on Neighbors, got %q", got)
+	}
+	p.send(tea.KeyPressMsg{Code: tea.KeyEnter})
+
+	if len(f.ActivateCalls) != 1 {
+		t.Fatalf("Enter should activate exactly once, got %d (%v)", len(f.ActivateCalls), f.Calls)
+	}
+	if got := f.ActivateCalls[0].ConnectionID; got != "neighbors-current" {
+		t.Errorf("connect should skip the profile pinned to a missing interface, activated %q", got)
+	}
+}
+
 func TestWifi_FailedActivationShowsTheBackendErrorOnTheStatusLine(t *testing.T) {
 	f := fake.SeedArchLaptop()
 	f.Errs["Activate"] = errors.New("profile is not compatible with device (mismatching interface name)")

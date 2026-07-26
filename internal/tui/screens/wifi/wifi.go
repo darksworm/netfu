@@ -44,6 +44,10 @@ type RescanMsg struct{}
 type savedProfile struct {
 	SSID         string
 	ConnectionID string
+	// InterfacePin is connection.interface-name; a profile pinned to another
+	// interface cannot activate on this device.
+	InterfacePin string
+	LastUsedUnix int64
 }
 
 type loadedMsg struct {
@@ -140,21 +144,27 @@ func (m Model) savedWifiProfiles() ([]savedProfile, error) {
 		if c.Type != "802-11-wireless" {
 			continue
 		}
-		saved = append(saved, savedProfile{SSID: m.ssidOf(c), ConnectionID: c.ID})
+		ssid, pin := m.ssidAndPinOf(c)
+		saved = append(saved, savedProfile{
+			SSID: ssid, ConnectionID: c.ID, InterfacePin: pin, LastUsedUnix: c.LastUsedUnix,
+		})
 	}
 	return saved, nil
 }
 
-// ssidOf prefers the profile's stored SSID; a profile renamed away from its
-// SSID still matches the scanned network.
-func (m Model) ssidOf(c domain.Connection) string {
+// ssidAndPinOf prefers the profile's stored SSID (a renamed profile still
+// matches its network) and reads its interface pin.
+func (m Model) ssidAndPinOf(c domain.Connection) (ssid, pin string) {
+	ssid = c.Name
 	settings, err := m.backend.GetSettings(c.ID)
-	if err == nil {
-		if ssid, ok := settings["802-11-wireless"]["ssid"].(string); ok && ssid != "" {
-			return ssid
-		}
+	if err != nil {
+		return ssid, ""
 	}
-	return c.Name
+	if s, ok := settings["802-11-wireless"]["ssid"].(string); ok && s != "" {
+		ssid = s
+	}
+	pin, _ = settings["connection"]["interface-name"].(string)
+	return ssid, pin
 }
 
 func (m Model) wifiDeviceName() (string, error) {
@@ -611,16 +621,31 @@ func (m Model) Status() string {
 	return m.notice
 }
 
+// savedProfileFor picks the profile Enter activates for an SSID: among the
+// matches, one this device can actually use (unpinned or pinned to it),
+// most recently used first; a pinned-elsewhere profile only as a last
+// resort, so NM's error explains the situation.
 func (m Model) savedProfileFor(ssid string) (savedProfile, bool) {
 	if ssid == "" {
 		return savedProfile{}, false
 	}
+	var best savedProfile
+	found := false
 	for _, s := range m.saved {
-		if s.SSID == ssid {
-			return s, true
+		if s.SSID != ssid {
+			continue
+		}
+		if !found {
+			best, found = s, true
+			continue
+		}
+		bestUsable := best.InterfacePin == "" || best.InterfacePin == m.wifiDevice
+		usable := s.InterfacePin == "" || s.InterfacePin == m.wifiDevice
+		if usable && (!bestUsable || s.LastUsedUnix > best.LastUsedUnix) {
+			best = s
 		}
 	}
-	return savedProfile{}, false
+	return best, found
 }
 
 func (m Model) renderRow(ap domain.AccessPoint) string {
