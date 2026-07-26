@@ -21,9 +21,12 @@ type Fake struct {
 	Errs map[string]error
 	// Calls records every mutator call for assertions.
 	Calls []string
-	// JoinCalls and ActivateCalls capture mutator arguments for assertions.
+	// JoinCalls, ActivateCalls, UpdateCalls and AddedSettings capture
+	// mutator arguments for assertions.
 	JoinCalls     []domain.JoinRequest
 	ActivateCalls []ActivateCall
+	UpdateCalls   []UpdateCall
+	AddedSettings []domain.ConnectionSettings
 
 	events chan domain.Event
 }
@@ -31,6 +34,11 @@ type Fake struct {
 type ActivateCall struct {
 	ConnectionID string
 	DeviceName   string
+}
+
+type UpdateCall struct {
+	ConnectionID string
+	Settings     domain.ConnectionSettings
 }
 
 var _ backend.Backend = (*Fake)(nil)
@@ -167,15 +175,18 @@ func (f *Fake) RequestScan() error {
 }
 
 func (f *Fake) UpdateSettings(connectionID string, settings domain.ConnectionSettings) error {
+	f.UpdateCalls = append(f.UpdateCalls, UpdateCall{ConnectionID: connectionID, Settings: settings})
 	return f.record("UpdateSettings")
 }
 
 func (f *Fake) AddConnection(settings domain.ConnectionSettings) error {
+	f.AddedSettings = append(f.AddedSettings, settings)
 	return f.record("AddConnection")
 }
 
 func (f *Fake) DeleteConnection(connectionID string) error {
-	return f.record("DeleteConnection")
+	f.Calls = append(f.Calls, fmt.Sprintf("DeleteConnection(%s)", connectionID))
+	return f.Errs["DeleteConnection"]
 }
 
 func (f *Fake) SetHostname(hostname string) error {
