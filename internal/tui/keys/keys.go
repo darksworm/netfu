@@ -77,7 +77,7 @@ func DefaultDevices() Devices {
 }
 
 func (d Devices) ShortHelp() []key.Binding {
-	return append(d.List.ShortHelp(), d.Enter, d.Filter)
+	return []key.Binding{d.Enter, d.Activate, d.Deactivate, d.Filter}
 }
 
 func (d Devices) FullHelp() [][]key.Binding {
@@ -112,7 +112,7 @@ func DefaultWifi() Wifi {
 		),
 		Edit: key.NewBinding(
 			key.WithKeys("e"),
-			key.WithHelp("e", "edit profile"),
+			key.WithHelp("e", "edit"),
 		),
 		Forget: key.NewBinding(
 			key.WithKeys("x"),
@@ -129,8 +129,10 @@ func DefaultWifi() Wifi {
 	}
 }
 
+// ShortHelp is the footer: the actions that teach the tab, navigation
+// stays in the ? overlay.
 func (w Wifi) ShortHelp() []key.Binding {
-	return append(w.List.ShortHelp(), w.Connect, w.Filter)
+	return []key.Binding{w.Connect, w.Deactivate, w.Forget, w.Edit, w.Filter}
 }
 
 func (w Wifi) FullHelp() [][]key.Binding {
@@ -176,7 +178,7 @@ func DefaultEthernet() Ethernet {
 }
 
 func (e Ethernet) ShortHelp() []key.Binding {
-	return append(e.List.ShortHelp(), e.Activate, e.Deactivate)
+	return []key.Binding{e.Activate, e.Deactivate, e.Edit, e.Delete, e.New}
 }
 
 func (e Ethernet) FullHelp() [][]key.Binding {
@@ -207,7 +209,7 @@ func DefaultSystem() System {
 }
 
 func (s System) ShortHelp() []key.Binding {
-	return append(s.List.ShortHelp(), s.Edit, s.Toggle)
+	return []key.Binding{s.Edit, s.Toggle}
 }
 
 func (s System) FullHelp() [][]key.Binding {
@@ -252,7 +254,7 @@ func DefaultConnections() Connections {
 }
 
 func (c Connections) ShortHelp() []key.Binding {
-	return append(c.List.ShortHelp(), c.Edit, c.New)
+	return []key.Binding{c.Activate, c.Deactivate, c.Edit, c.Delete, c.New}
 }
 
 func (c Connections) FullHelp() [][]key.Binding {

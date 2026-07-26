@@ -220,6 +220,37 @@ func TestApp_ResizePropagatesToActiveScreenAndListsReflow(t *testing.T) {
 	}
 }
 
+func TestApp_FooterTeachesEachTabsCoreActions(t *testing.T) {
+	f := fake.SeedArchLaptop()
+	p := newPump(t, New(f))
+	p.send(tea.WindowSizeMsg{Width: 100, Height: 24})
+
+	footer := func() string {
+		lines := strings.Split(strings.TrimRight(p.view(), "\n"), "\n")
+		return lines[len(lines)-1]
+	}
+
+	for _, want := range []string{"connect", "disconnect", "forget", "edit", "filter"} {
+		if !strings.Contains(footer(), want) {
+			t.Errorf("the wifi footer should teach %q, got: %s", want, footer())
+		}
+	}
+
+	p.send(keyPress('2')) // ethernet tab (fake has enp0s31f6)
+	for _, want := range []string{"activate", "edit", "new"} {
+		if !strings.Contains(footer(), want) {
+			t.Errorf("the ethernet footer should teach %q, got: %s", want, footer())
+		}
+	}
+
+	p.send(keyPress('4')) // Other
+	for _, want := range []string{"activate", "edit", "delete", "new"} {
+		if !strings.Contains(footer(), want) {
+			t.Errorf("the Other footer should teach %q, got: %s", want, footer())
+		}
+	}
+}
+
 func TestApp_QuestionMarkTogglesHelpOverlay(t *testing.T) {
 	f := fake.SeedArchLaptop()
 	p := newPump(t, New(f))
