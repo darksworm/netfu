@@ -275,8 +275,8 @@ func TestDevices_DeviceStateEventUpdatesRowLive(t *testing.T) {
 	f.Push(domain.Event{Kind: domain.EventDeviceChanged, DeviceName: "enp0s31f6"})
 	p.deliverNext()
 
-	if view := p.view(); !strings.Contains(view, "enp0s31f6  ethernet  connected") {
-		t.Errorf("row should show the new device state, got:\n%s", view)
+	if row := lineContaining(t, p.view(), "enp0s31f6"); !strings.Contains(row, "connected") {
+		t.Errorf("row should show the new device state, got: %s", row)
 	}
 	if got := p.app().devices.Selected().Name; got != "enp0s31f6" {
 		t.Errorf("live update should keep the cursor on enp0s31f6, got %q", got)

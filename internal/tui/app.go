@@ -283,7 +283,7 @@ func (a App) View() tea.View {
 	}
 	// The status line lives on the box's last interior row — always
 	// reserved so async feedback never shifts the content above it.
-	content = a.boxed(strings.TrimRight(content, "\n") + "\n" + a.status.View())
+	content = a.boxed(strings.TrimSuffix(content, "\n") + "\n" + a.status.View())
 	sections := []string{a.headerView(), a.tabBarView(), content,
 		a.help.View(helpKeys{screen: a.activeScreenKeys(), global: a.keys})}
 	base := strings.Join(sections, "")
@@ -306,7 +306,9 @@ func (a App) boxed(content string) string {
 	if a.theme.Dim != nil {
 		box = box.BorderForeground(a.theme.Dim)
 	}
-	return box.Render(strings.TrimRight(content, "\n")) + "\n"
+	// The content arrives with its trailing newline already stripped by
+	// the caller; an empty last line is the reserved status row.
+	return box.Render(content) + "\n"
 }
 
 func (a App) activeOverlay() string {

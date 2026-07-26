@@ -31,8 +31,8 @@ func TestDevices_ActivateSavedProfileOnDisconnectedEthernet(t *testing.T) {
 	f.Push(domain.Event{Kind: domain.EventDeviceChanged, DeviceName: "enp0s31f6"})
 	p.deliverNext()
 
-	if view := p.view(); !strings.Contains(view, "enp0s31f6  ethernet  connecting") {
-		t.Errorf("row should show the activating state after the device event, got:\n%s", view)
+	if row := lineContaining(t, p.view(), "enp0s31f6"); !strings.Contains(row, "connecting") {
+		t.Errorf("row should show the activating state after the device event, got: %s", row)
 	}
 }
 

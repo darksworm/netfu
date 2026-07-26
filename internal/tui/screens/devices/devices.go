@@ -288,13 +288,14 @@ func (m Model) View() string {
 	if m.showDetail {
 		return m.detailView()
 	}
+	const columns = "%-12s  %-10s  %-14s  %s"
 	var lines []string
-	lines = append(lines, style.Title.Render("Devices"))
+	lines = append(lines, style.Faint.Render("  "+fmt.Sprintf(columns, "DEVICE", "TYPE", "STATE", "CONNECTION")))
 	if m.filtering || m.filter != "" {
 		lines = append(lines, "/"+m.filter)
 	}
 	for i, d := range m.visible() {
-		row := fmt.Sprintf("%s  %s  %s  %s", d.Name, d.Type, d.State, d.ActiveConnection)
+		row := fmt.Sprintf(columns, d.Name, d.Type, d.State, d.ActiveConnection)
 		if i == m.cursor {
 			lines = append(lines, style.SelectedRow("▸ "+row, m.width))
 		} else {

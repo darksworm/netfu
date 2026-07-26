@@ -3,6 +3,8 @@ package devices
 import (
 	"slices"
 	"strings"
+
+	"github.com/charmbracelet/x/ansi"
 	"testing"
 
 	tea "charm.land/bubbletea/v2"
@@ -28,6 +30,37 @@ func TestDevices_ListShowsManagedDevicesWithStateAndActiveConnection(t *testing.
 	}
 	if strings.Contains(view, "veth1a2b3c") {
 		t.Errorf("unmanaged devices should be hidden, got:\n%s", view)
+	}
+}
+
+func TestDevices_ListHasColumnHeaderWithAlignedColumns(t *testing.T) {
+	f := fake.SeedArchLaptop()
+	m := New(f)
+	m = loadDevices(t, m)
+
+	lines := strings.Split(ansi.Strip(m.View()), "\n")
+	header := lines[0]
+	for _, col := range []string{"DEVICE", "TYPE", "STATE", "CONNECTION"} {
+		if !strings.Contains(header, col) {
+			t.Fatalf("the first line should be a column header with %q, got %q", col, header)
+		}
+	}
+
+	row := func(name string) string {
+		for _, line := range lines {
+			if strings.Contains(line, name) {
+				return line
+			}
+		}
+		t.Fatalf("no row for %s in:\n%s", name, m.View())
+		return ""
+	}
+	enp, docker := row("enp0s31f6"), row("docker0")
+	if got, want := strings.Index(enp, "ethernet"), strings.Index(header, "TYPE"); got != want {
+		t.Errorf("the type column should align with its header (col %d vs %d):\n%s\n%s", got, want, header, enp)
+	}
+	if got, want := strings.LastIndex(docker, "docker0"), strings.Index(header, "CONNECTION"); got != want {
+		t.Errorf("the connection column should align with its header (col %d vs %d):\n%s\n%s", got, want, header, docker)
 	}
 }
 
