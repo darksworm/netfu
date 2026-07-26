@@ -296,7 +296,7 @@ func (m Model) View() string {
 	for i, d := range m.visible() {
 		row := fmt.Sprintf("%s  %s  %s  %s", d.Name, d.Type, d.State, d.ActiveConnection)
 		if i == m.cursor {
-			lines = append(lines, "▸ "+style.Selected.Render(row))
+			lines = append(lines, style.SelectedRow("▸ "+row, m.width))
 		} else {
 			lines = append(lines, "  "+row)
 		}

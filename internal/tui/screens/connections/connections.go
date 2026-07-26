@@ -436,7 +436,7 @@ func (m Model) renderRow(c domain.Connection, selected bool) string {
 	row := fmt.Sprintf("%s%s %-20s %-10s %-10s %s",
 		cursor, mark, c.Name, strings.ToLower(typeLabel(c.Type)), device, lastUsed(c))
 	if selected {
-		return style.Selected.Render(row)
+		return style.SelectedRow(row, m.width)
 	}
 	return row
 }

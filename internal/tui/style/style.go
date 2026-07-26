@@ -11,9 +11,26 @@ import (
 
 var (
 	Title    = lipgloss.NewStyle().Bold(true)
-	Selected = lipgloss.NewStyle().Bold(true)
+	Selected = lipgloss.NewStyle().Reverse(true)
 	Faint    = lipgloss.NewStyle().Faint(true)
 )
+
+// SelectedRow highlights the cursor row, padding the highlight to the full
+// pane width so the cursor bar spans the terminal.
+func SelectedRow(row string, width int) string {
+	s := Selected
+	if width > 0 {
+		s = s.Width(width)
+	}
+	return s.Render(row)
+}
+
+// ResolveSelected swaps the reverse-video cursor fallback for the plan's
+// accent-tinted background once the terminal background is known.
+func ResolveSelected(isDark bool) {
+	tint := lipgloss.LightDark(isDark)(lipgloss.Color("#B6BFE3"), lipgloss.Color("#33467C"))
+	Selected = lipgloss.NewStyle().Background(tint)
+}
 
 // Fit renders a screen's lines into its pane: truncated to height and
 // clipped to width, zero meaning unconstrained.

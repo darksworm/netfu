@@ -493,6 +493,12 @@ func (m Model) connectSelected() (Model, tea.Cmd) {
 	return m, nil
 }
 
+// Scanning reports whether a requested scan is still pending, for the
+// app's tab-bar indicator.
+func (m Model) Scanning() bool {
+	return m.scanning
+}
+
 // Status is the screen's line for the app's status bar.
 func (m Model) Status() string {
 	if m.failed != nil {
@@ -619,19 +625,16 @@ func (m Model) View() string {
 	if m.filtering || m.filter != "" {
 		lines = append(lines, "/"+m.filter)
 	}
-	if m.scanning {
-		lines = append(lines, style.Title.Render("scan ⟳"))
-	}
 	list := m.list()
 	for i, ap := range list.InRange {
 		row := m.renderRow(ap)
 		if i == m.cursor {
-			row = style.Selected.Render(row)
+			row = style.SelectedRow(row, m.width)
 		}
 		lines = append(lines, row)
 	}
 	if len(list.OutOfRange) > 0 {
-		lines = append(lines, "─ out of range ─")
+		lines = append(lines, "", "─ out of range ─")
 		for _, ssid := range list.OutOfRange {
 			lines = append(lines, fmt.Sprintf("  %-24s ⋆ saved", ssid))
 		}

@@ -103,7 +103,7 @@ func (a App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// Header and tab bar take the first two lines and the help footer the
 		// last; screens get the rest. The status line only appears while it
 		// has a message.
-		content := tea.WindowSizeMsg{Width: msg.Width, Height: max(msg.Height-3, 0)}
+		content := tea.WindowSizeMsg{Width: msg.Width, Height: max(msg.Height-chromeLines, 0)}
 		var wifiCmd, devicesCmd, connsCmd, systemCmd tea.Cmd
 		a.wifi, wifiCmd = a.wifi.Update(content)
 		a.devices, devicesCmd = a.devices.Update(content)
@@ -112,6 +112,7 @@ func (a App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return a, tea.Batch(wifiCmd, devicesCmd, connsCmd, systemCmd)
 	case tea.BackgroundColorMsg:
 		a.theme = style.NewTheme(msg.IsDark())
+		style.ResolveSelected(msg.IsDark())
 		a.help.Styles = help.DefaultStyles(msg.IsDark())
 		var cmd tea.Cmd
 		a.wifi, cmd = a.wifi.Update(msg)
@@ -251,23 +252,45 @@ func (a App) updateActiveScreen(msg tea.Msg) (tea.Model, tea.Cmd) {
 const (
 	minWidth  = 60
 	minHeight = 16
+	// chromeLines is what the shell keeps for itself: header, tab bar,
+	// reserved status line and help footer.
+	chromeLines = 4
 )
+
+// padToHeight fills the content pane with blank lines so the status line
+// and footer sit at the bottom of the terminal.
+func padToHeight(content string, height int) string {
+	if height <= 0 {
+		return content
+	}
+	lines := strings.Split(strings.TrimRight(content, "\n"), "\n")
+	for len(lines) < height {
+		lines = append(lines, "")
+	}
+	return strings.Join(lines, "\n") + "\n"
+}
 
 func (a App) View() tea.View {
 	if a.width > 0 && (a.width < minWidth || a.height < minHeight) {
 		return tea.NewView(fmt.Sprintf("Terminal too small (%dx%d, need %dx%d)",
 			a.width, a.height, minWidth, minHeight))
 	}
-	sections := []string{a.headerView(), a.tabBarView(), a.activeScreenView()}
-	if a.status.Message() != "" {
-		sections = append(sections, a.status.View()+"\n")
+	content := a.activeScreenView()
+	if a.height > 0 {
+		content = padToHeight(content, a.height-chromeLines)
 	}
-	sections = append(sections, a.help.View(helpKeys{screen: a.activeScreenKeys(), global: a.keys}))
+	// The status line is always reserved so async feedback never shifts
+	// the content above it.
+	sections := []string{a.headerView(), a.tabBarView(), content,
+		a.status.View() + "\n",
+		a.help.View(helpKeys{screen: a.activeScreenKeys(), global: a.keys})}
 	base := strings.Join(sections, "")
 	if overlay := a.activeOverlay(); overlay != "" {
 		base = layerCentered(base, overlay)
 	}
-	return tea.NewView(base)
+	view := tea.NewView(base)
+	view.AltScreen = true
+	return view
 }
 
 func (a App) activeOverlay() string {
@@ -337,7 +360,11 @@ func (a App) tabBarView() string {
 		}
 		parts[i] = entry
 	}
-	return a.clipToWidth(strings.Join(parts, " · ")) + "\n"
+	bar := strings.Join(parts, " · ")
+	if a.wifi.Scanning() {
+		bar += "   " + style.Faint.Render("scan ⟳")
+	}
+	return a.clipToWidth(bar) + "\n"
 }
 
 func (a App) clipToWidth(line string) string {

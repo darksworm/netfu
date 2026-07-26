@@ -295,7 +295,7 @@ func TestWifi_EnterOnUnknownWPA2NetworkOpensPasswordPrompt(t *testing.T) {
 			t.Errorf("the password prompt should show %q, got:\n%s", want, view)
 		}
 	}
-	if !strings.Contains(view, "Summer House") {
+	if !strings.Contains(view, "Our House 1") {
 		t.Errorf("the prompt should overlay the list, not replace it, got:\n%s", view)
 	}
 	if linesAfter := strings.Count(view, "\n"); linesAfter != linesBefore {

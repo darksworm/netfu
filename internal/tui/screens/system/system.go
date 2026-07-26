@@ -368,7 +368,7 @@ func (m Model) renderRow(r row, selected bool) string {
 	if r.kind == rowHostname && !m.hostnameAllowed() {
 		line = style.Faint.Render(line + " 🔒")
 	} else if selected {
-		line = style.Selected.Render(line)
+		line = style.SelectedRow(line, m.width)
 	}
 	if selected {
 		return "▸ " + line

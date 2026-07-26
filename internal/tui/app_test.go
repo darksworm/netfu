@@ -12,7 +12,17 @@ import (
 
 	"github.com/ilmars/netfu/internal/backend/fake"
 	"github.com/ilmars/netfu/internal/domain"
+	"github.com/ilmars/netfu/internal/tui/style"
 )
+
+func TestApp_RendersInTheAlternateScreenBuffer(t *testing.T) {
+	f := fake.SeedArchLaptop()
+	p := newPump(t, New(f))
+
+	if !p.model.(App).View().AltScreen {
+		t.Error("the app should render in the alternate screen buffer so it doesn't scroll the shell history")
+	}
+}
 
 func TestApp_StartsOnWifiTabAndQQuits(t *testing.T) {
 	f := fake.SeedArchLaptop()
@@ -243,6 +253,10 @@ func TestApp_DarkBackgroundSelectsDarkPalette(t *testing.T) {
 	}
 	if theme.Accent != lipgloss.Color("#7AA2F7") {
 		t.Errorf("dark palette accent should be #7AA2F7, got %v", theme.Accent)
+	}
+	// #33467C selection tint — the cursor row must follow the resolved theme.
+	if selected := style.Selected.Render("row"); !strings.Contains(selected, "48;2;51;70;124") {
+		t.Errorf("resolving a dark background should tint the cursor row, got %q", selected)
 	}
 }
 
