@@ -31,10 +31,13 @@ type Model struct {
 	// edit the query instead of navigating.
 	filter    string
 	filtering bool
-	modal     *confirm.Model
-	err       error
-	width     int
-	height    int
+	// showDetail pushes the read-only device detail as a layer over the
+	// list; Esc pops back.
+	showDetail bool
+	modal      *confirm.Model
+	err        error
+	width      int
+	height     int
 }
 
 type devicesLoadedMsg struct {
@@ -138,7 +141,21 @@ func (m Model) handleKey(msg tea.KeyPressMsg) (Model, tea.Cmd) {
 	if m.filtering {
 		return m.handleFilterKey(msg), nil
 	}
+	// q should also pop this layer, but the app's global Quit binding
+	// consumes q before the screen sees it; that plumbing is app-level.
+	if m.showDetail {
+		if msg.Code == tea.KeyEsc {
+			m.showDetail = false
+		}
+		return m, nil
+	}
 	switch {
+	// The Devices keymap lives in the shared keys package owned by another
+	// lane this milestone; i is matched inline until it can host Info.
+	case msg.Text == "i":
+		if len(m.visible()) > 0 {
+			m.showDetail = true
+		}
 	case key.Matches(msg, m.keys.Down):
 		if m.cursor < len(m.visible())-1 {
 			m.cursor++
@@ -255,6 +272,9 @@ func deactivate(mut backend.Mutator, ac domain.ActiveConnection) tea.Cmd {
 }
 
 func (m Model) View() string {
+	if m.showDetail {
+		return m.detailView()
+	}
 	var lines []string
 	lines = append(lines, style.Title.Render("Devices"))
 	if m.filtering || m.filter != "" {
@@ -279,6 +299,22 @@ func (m Model) View() string {
 		for i, line := range lines {
 			lines[i] = clip.Render(line)
 		}
+	}
+	return strings.Join(lines, "\n") + "\n"
+}
+
+func (m Model) detailView() string {
+	d := m.Selected()
+	lines := []string{
+		style.Title.Render("Device " + d.Name),
+		fmt.Sprintf("%-20s %s", "Name:", d.Name),
+		fmt.Sprintf("%-20s %s", "Type:", d.Type),
+		fmt.Sprintf("%-20s %s", "State:", d.State),
+		fmt.Sprintf("%-20s %s", "Active connection:", d.ActiveConnection),
+		"esc back",
+	}
+	if m.height > 0 && len(lines) > m.height {
+		lines = lines[:m.height]
 	}
 	return strings.Join(lines, "\n") + "\n"
 }

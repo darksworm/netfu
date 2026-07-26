@@ -150,6 +150,39 @@ func TestDevices_ListShowsPhysicalDevicesBeforeVirtual(t *testing.T) {
 	}
 }
 
+func TestDevices_IShowsReadOnlyDetailAndEscPops(t *testing.T) {
+	f := fake.SeedArchLaptop()
+	m := New(f)
+	m = loadDevices(t, m)
+
+	m, _ = m.Update(keyPress('i'))
+	view := m.View()
+	for _, want := range []string{
+		"Name:", "wlan0",
+		"Type:", "wifi",
+		"State:", "connected",
+		"Active connection:", "Our House 1",
+	} {
+		if !strings.Contains(view, want) {
+			t.Errorf("the detail view should show %q, got:\n%s", want, view)
+		}
+	}
+	if strings.Contains(view, "enp0s31f6") {
+		t.Errorf("the detail view should replace the list, got:\n%s", view)
+	}
+	if len(f.Calls) != 0 {
+		t.Errorf("the detail view is read-only, backend calls: %v", f.Calls)
+	}
+
+	m, _ = m.Update(tea.KeyPressMsg{Code: tea.KeyEsc})
+	if view := m.View(); !strings.Contains(view, "enp0s31f6") {
+		t.Errorf("esc should pop back to the device list, got:\n%s", view)
+	}
+	if got := m.Selected().Name; got != "wlan0" {
+		t.Errorf("popping the detail should keep the cursor, got %q", got)
+	}
+}
+
 func keyPress(r rune) tea.KeyPressMsg {
 	return tea.KeyPressMsg{Code: r, Text: string(r)}
 }

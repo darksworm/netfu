@@ -104,6 +104,46 @@ func (w Wifi) FullHelp() [][]key.Binding {
 	return append(w.List.FullHelp(), []key.Binding{w.Connect, w.Filter, w.ClearFilter})
 }
 
+// System is the System tab keymap: list navigation over the settings
+// fields and the active-connections rows, plus their contextual actions.
+type System struct {
+	List
+	Edit       key.Binding
+	Toggle     key.Binding
+	Activate   key.Binding
+	Deactivate key.Binding
+}
+
+func DefaultSystem() System {
+	return System{
+		List: DefaultList(),
+		Edit: key.NewBinding(
+			key.WithKeys("i", "enter"),
+			key.WithHelp("i/↵", "edit"),
+		),
+		Toggle: key.NewBinding(
+			key.WithKeys("space"),
+			key.WithHelp("space", "toggle"),
+		),
+		Activate: key.NewBinding(
+			key.WithKeys("a"),
+			key.WithHelp("a", "activate"),
+		),
+		Deactivate: key.NewBinding(
+			key.WithKeys("d"),
+			key.WithHelp("d", "deactivate"),
+		),
+	}
+}
+
+func (s System) ShortHelp() []key.Binding {
+	return append(s.List.ShortHelp(), s.Edit, s.Activate, s.Deactivate)
+}
+
+func (s System) FullHelp() [][]key.Binding {
+	return append(s.List.FullHelp(), []key.Binding{s.Edit, s.Toggle, s.Activate, s.Deactivate})
+}
+
 type Global struct {
 	Help    key.Binding
 	Quit    key.Binding

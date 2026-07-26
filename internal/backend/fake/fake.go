@@ -179,9 +179,15 @@ func (f *Fake) DeleteConnection(connectionID string) error {
 }
 
 func (f *Fake) SetHostname(hostname string) error {
-	return f.record("SetHostname")
+	f.Calls = append(f.Calls, fmt.Sprintf("SetHostname(%s)", hostname))
+	if err := f.Errs["SetHostname"]; err != nil {
+		return err
+	}
+	f.HostnameValue = hostname
+	return nil
 }
 
 func (f *Fake) SetWifiEnabled(enabled bool) error {
-	return f.record("SetWifiEnabled")
+	f.Calls = append(f.Calls, fmt.Sprintf("SetWifiEnabled(%t)", enabled))
+	return f.Errs["SetWifiEnabled"]
 }
