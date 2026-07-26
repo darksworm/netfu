@@ -1,0 +1,3 @@
+netfu
+*.test
+coverage.out
