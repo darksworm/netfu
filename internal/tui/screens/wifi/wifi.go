@@ -67,6 +67,7 @@ type connectResultMsg struct {
 type Model struct {
 	backend      backend.Backend
 	keys         keys.Wifi
+	perms        domain.Permissions
 	aps          []domain.AccessPoint
 	saved        []savedProfile
 	activeSSID   string
@@ -186,6 +187,24 @@ func (m Model) activeWifi(wifiDevice string, saved []savedProfile) (ssid, connID
 		return ac.Name, ac.ID, nil
 	}
 	return "", "", nil
+}
+
+// SetPermissions caches the startup polkit query result.
+func (m Model) SetPermissions(perms domain.Permissions) Model {
+	m.perms = perms
+	return m
+}
+
+// canModify defaults to allowed while the permission is unknown; polkit
+// only locks the actions when it explicitly denies them.
+func (m Model) canModify() bool {
+	allowed, known := m.perms[domain.PermModifySystem]
+	return !known || allowed
+}
+
+func (m Model) denyModify() Model {
+	m.notice = "🔒 not permitted (polkit)"
+	return m
 }
 
 // Keys returns the keymap for the help footer: the editor's while it is
@@ -374,8 +393,14 @@ func (m Model) handleKey(msg tea.KeyPressMsg) (Model, tea.Cmd) {
 	case key.Matches(msg, m.keys.Deactivate):
 		return m.offerDeactivate()
 	case key.Matches(msg, m.keys.Edit):
+		if !m.canModify() {
+			return m.denyModify(), nil
+		}
 		return m.openEditor()
 	case key.Matches(msg, m.keys.Forget):
+		if !m.canModify() {
+			return m.denyModify(), nil
+		}
 		return m.offerForget()
 	}
 	return m, nil

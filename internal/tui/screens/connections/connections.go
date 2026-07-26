@@ -21,9 +21,6 @@ import (
 	"github.com/ilmars/netfu/internal/tui/style"
 )
 
-// permModifySystem is the polkit permission gating profile changes.
-const permModifySystem = "org.freedesktop.NetworkManager.settings.modify.system"
-
 type Model struct {
 	backend backend.Backend
 	keys    keys.Connections
@@ -75,24 +72,53 @@ func (m Model) load() tea.Msg {
 	if err == nil {
 		err = devicesErr
 	}
-	return loadedMsg{conns: profilesWithoutOwnTab(conns, devices), active: active, devices: devices, err: err}
+	return loadedMsg{conns: profilesWithoutOwnTab(conns, devices, m.wiredPins(conns)),
+		active: active, devices: devices, err: err}
+}
+
+// wiredPins maps each wired profile to the interface it is pinned to
+// (connection.interface-name), "" for unpinned. A failed settings read
+// counts as unpinned — the profile then follows the NIC-presence rule.
+func (m Model) wiredPins(conns []domain.Connection) map[string]string {
+	pins := map[string]string{}
+	for _, c := range conns {
+		if c.Type != "802-3-ethernet" {
+			continue
+		}
+		settings, err := m.backend.GetSettings(c.ID)
+		if err != nil {
+			continue
+		}
+		pin, _ := settings["connection"]["interface-name"].(string)
+		pins[c.ID] = pin
+	}
+	return pins
 }
 
 // profilesWithoutOwnTab is the Other tab's row model: wifi profiles live on
 // the wifi device tab and wired profiles on their NIC's tab, so this keeps
-// the rest — vpn, bridge, bond, vlan — plus wired profiles with no NIC to
-// live on.
-func profilesWithoutOwnTab(conns []domain.Connection, devices []domain.Device) []domain.Connection {
+// the rest — vpn, bridge, bond, vlan — plus orphaned wired profiles: no NIC
+// to live on, or pinned to an interface no current device has.
+func profilesWithoutOwnTab(conns []domain.Connection, devices []domain.Device, pins map[string]string) []domain.Connection {
 	nicPresent := false
+	deviceNames := map[string]bool{}
 	for _, d := range devices {
+		deviceNames[d.Name] = true
 		if d.Managed && d.Type == domain.DeviceTypeEthernet {
 			nicPresent = true
 		}
 	}
 	var out []domain.Connection
 	for _, c := range conns {
-		if c.Type == "802-11-wireless" || (c.Type == "802-3-ethernet" && nicPresent) {
+		if c.Type == "802-11-wireless" {
 			continue
+		}
+		if c.Type == "802-3-ethernet" {
+			pin := pins[c.ID]
+			orphaned := pin != "" && !deviceNames[pin]
+			if nicPresent && !orphaned {
+				continue
+			}
 		}
 		out = append(out, c)
 	}
@@ -117,7 +143,7 @@ func (m Model) SetPermissions(perms domain.Permissions) Model {
 // canModify defaults to allowed while the permission is unknown; polkit
 // only locks the actions when it explicitly denies them.
 func (m Model) canModify() bool {
-	allowed, known := m.perms[permModifySystem]
+	allowed, known := m.perms[domain.PermModifySystem]
 	return !known || allowed
 }
 

@@ -66,6 +66,9 @@ type JoinRequest struct {
 
 type Permissions map[string]bool
 
+// PermModifySystem is the polkit permission gating profile changes.
+const PermModifySystem = "org.freedesktop.NetworkManager.settings.modify.system"
+
 // NMState is NetworkManager's overall state, collapsed to what the UI
 // distinguishes.
 type NMState string

@@ -24,14 +24,17 @@ close the bar. Device hotplug re-derives the tabs live.
    per SSID, signal-sorted), join with password modal, wrong-password
    retry, hidden networks, out-of-range saved section, and wifi profile
    management (`e` edit, `x` forget).
-2. **Ethernet device** (e.g. `enp0s31f6`) — device detail; `a` activates
-   the best matching wired profile, `d` deactivates with confirm.
+2. **Ethernet device** (e.g. `enp0s31f6`) — device detail plus the wired
+   profiles usable on this NIC (unpinned or pinned to it), most recently
+   used first; `a`/`↵` activates the selected profile, `d` deactivates
+   with confirm, `e` edit, `x` delete, `n` new profile pinned to this NIC.
 3. **Virtual** — bridges, veth, tun & co with state; activate/deactivate,
    detail view (`p2p-dev-*` noise is hidden).
 4. **Other** — saved profiles without their own tab: VPN, bridge, bond,
-   vlan; typed editor for the fields you actually change, untouched
-   settings preserved verbatim; VPN activate/deactivate lives here (D-Bus
-   cannot create VPN profiles).
+   vlan, plus orphaned wired profiles (no NIC present, or pinned to an
+   interface no current device has); typed editor for the fields you
+   actually change, untouched settings preserved verbatim; VPN
+   activate/deactivate lives here (D-Bus cannot create VPN profiles).
 5. **System** — hostname, wifi radio, NetworkManager state.
 
 ## Key bindings
@@ -40,7 +43,7 @@ close the bar. Device hotplug re-derives the tabs live.
 | --- | --- |
 | `1`–`9`, `[` / `]` | switch tab |
 | `j` / `k`, `g` / `G` | move / jump to top, bottom |
-| `↵` | contextual, never destructive: connect, edit, confirm-deactivate |
+| `↵` | contextual, never destructive: connect, activate, edit, confirm-deactivate |
 | `/` | filter (wifi, virtual) |
 | `?` | help |
 | `W` | wifi radio toggle (global) |
@@ -48,9 +51,9 @@ close the bar. Device hotplug re-derives the tabs live.
 | `esc` | pop layer / close modal / clear filter — never quits |
 
 Per tab: Wifi `c` join hidden, `d` disconnect, `e` edit, `x` forget ·
-Ethernet `a`/`d` activate/deactivate · Virtual `i` detail, `a`/`d` ·
-Other `e` edit, `n` new, `x` delete, `a`/`d` · System `i`/`↵` edit field,
-`space` toggle.
+Ethernet `a`/`↵` activate, `d` deactivate, `e` edit, `x` delete, `n` new ·
+Virtual `i` detail, `a`/`d` · Other `e`/`↵` edit, `n` new, `x` delete,
+`a`/`d` · System `i`/`↵` edit field, `space` toggle.
 
 Editor: `j`/`k` fields, `↵`/`i` edit field, `space` cycle, `s` save,
 `esc`/`q` back.

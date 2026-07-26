@@ -138,32 +138,50 @@ func (w Wifi) FullHelp() [][]key.Binding {
 		[]key.Binding{w.Connect, w.JoinHidden, w.Deactivate, w.Edit, w.Forget, w.Filter, w.ClearFilter})
 }
 
-// Ethernet is a wired device tab's keymap: just the two device actions —
-// the tab is a detail view, not a list.
+// Ethernet is a wired device tab's keymap: the device detail plus its
+// wired profile list with the profile actions.
 type Ethernet struct {
+	List
 	Activate   key.Binding
 	Deactivate key.Binding
+	Edit       key.Binding
+	Delete     key.Binding
+	New        key.Binding
 }
 
 func DefaultEthernet() Ethernet {
 	return Ethernet{
+		List: DefaultList(),
 		Activate: key.NewBinding(
-			key.WithKeys("a"),
-			key.WithHelp("a", "activate"),
+			key.WithKeys("a", "enter"),
+			key.WithHelp("a/↵", "activate"),
 		),
 		Deactivate: key.NewBinding(
 			key.WithKeys("d"),
 			key.WithHelp("d", "deactivate"),
 		),
+		Edit: key.NewBinding(
+			key.WithKeys("e"),
+			key.WithHelp("e", "edit"),
+		),
+		Delete: key.NewBinding(
+			key.WithKeys("x"),
+			key.WithHelp("x", "delete"),
+		),
+		New: key.NewBinding(
+			key.WithKeys("n"),
+			key.WithHelp("n", "new"),
+		),
 	}
 }
 
 func (e Ethernet) ShortHelp() []key.Binding {
-	return []key.Binding{e.Activate, e.Deactivate}
+	return append(e.List.ShortHelp(), e.Activate, e.Deactivate)
 }
 
 func (e Ethernet) FullHelp() [][]key.Binding {
-	return [][]key.Binding{{e.Activate, e.Deactivate}}
+	return append(e.List.FullHelp(),
+		[]key.Binding{e.Activate, e.Deactivate, e.Edit, e.Delete, e.New})
 }
 
 // System is the System tab keymap: list navigation over the settings

@@ -60,6 +60,14 @@ func NewProfile(b backend.Backend, nmType string) Model {
 	return m
 }
 
+// NewWiredProfile is the wizard for a wired profile pinned to one NIC; the
+// pin rides the settings pass-through, the form never shows it.
+func NewWiredProfile(b backend.Backend, device string) Model {
+	m := NewProfile(b, "802-3-ethernet")
+	m.settings["connection"]["interface-name"] = device
+	return m
+}
+
 func (m Model) Init() tea.Cmd {
 	if m.isNew {
 		return nil

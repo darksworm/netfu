@@ -3,12 +3,12 @@
 ╭──────────────────────────────────────────────────────────────────────────────╮
 │ Device enp0s31f6                                                             │
 │ Type:                ethernet                                                │
-│ State:               unavailable                                             │
+│ State:               disconnected                                            │
 │ Active connection:   —                                                       │
 │                                                                              │
-│                                                                              │
-│                                                                              │
-│                                                                              │
+│    NAME                                                       LAST USED      │
+│ ▸  Office LAN                                                 2026-06-30     │
+│    Dock                                                       never          │
 │                                                                              │
 │                                                                              │
 │                                                                              │

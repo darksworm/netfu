@@ -1,6 +1,7 @@
 package tui
 
 import (
+	"errors"
 	"fmt"
 	"reflect"
 	"slices"
@@ -85,6 +86,34 @@ func TestOther_ListsWiredProfilesWhenNoEthernetNICIsPresent(t *testing.T) {
 	}
 	if view := p.view(); !strings.Contains(view, "Office LAN") {
 		t.Errorf("a wired profile with no NIC to live on should fall back to Other, got:\n%s", view)
+	}
+}
+
+func TestOther_ListsWiredProfilesPinnedToAMissingNICEvenWhenANICIsPresent(t *testing.T) {
+	f := seedWiredProfiles() // enp0s31f6 present; USB Dock pinned to absent enp5s0u1
+	p := newPump(t, New(f))
+
+	p.send(keyPress('4'))
+	view := p.view()
+	if !strings.Contains(view, "USB Dock") {
+		t.Errorf("a wired profile pinned to a missing NIC has no tab to live on and belongs here, got:\n%s", view)
+	}
+	// Profiles the present NIC can host live on its tab, not here.
+	for _, elsewhere := range []string{"Office LAN", "Dock "} {
+		if strings.Contains(strings.ReplaceAll(view, "USB Dock", ""), elsewhere) {
+			t.Errorf("%q lives on the NIC's tab and should not be listed under Other, got:\n%s", elsewhere, view)
+		}
+	}
+}
+
+func TestOther_TreatsAWiredProfileWithUnreadableSettingsAsUnpinned(t *testing.T) {
+	f := seedWiredProfiles()
+	f.Errs["GetSettings"] = errors.New("dbus timeout")
+	p := newPump(t, New(f))
+
+	p.send(keyPress('4'))
+	if view := p.view(); strings.Contains(view, "USB Dock") {
+		t.Errorf("with unreadable settings the pin is unknown; the profile should stay off Other, got:\n%s", view)
 	}
 }
 

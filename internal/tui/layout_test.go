@@ -76,6 +76,16 @@ func TestLayout_EthernetTab(t *testing.T) {
 	requireGolden(t, "ethernet_80x24", p.view())
 }
 
+func TestLayout_EthernetTabWithProfiles(t *testing.T) {
+	f := seedWiredProfiles()
+	p := newPump(t, New(f))
+
+	p.send(tea.WindowSizeMsg{Width: 80, Height: 24})
+	p.send(keyPress('2'))
+
+	requireGolden(t, "ethernet_profiles_80x24", p.view())
+}
+
 func TestLayout_VirtualTab(t *testing.T) {
 	f := fake.SeedArchLaptop()
 	p := newPump(t, New(f))

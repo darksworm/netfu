@@ -718,6 +718,40 @@ func TestWifi_XOnAnUnsavedNetworkDoesNothing(t *testing.T) {
 	}
 }
 
+func TestWifi_EditLockedWhenModifySystemPermissionDenied(t *testing.T) {
+	f := fake.SeedArchLaptop()
+	f.Perms = domain.Permissions{"org.freedesktop.NetworkManager.settings.modify.system": false}
+	p := newPump(t, New(f))
+
+	p.send(keyPress('e'))
+	view := p.view()
+	if strings.Contains(view, "Autoconnect") {
+		t.Fatalf("e must not open the editor when modify is denied, got:\n%s", view)
+	}
+	if !strings.Contains(view, "🔒 not permitted (polkit)") {
+		t.Errorf("the status line should explain the polkit denial, got:\n%s", view)
+	}
+}
+
+func TestWifi_ForgetLockedWhenModifySystemPermissionDenied(t *testing.T) {
+	f := fake.SeedArchLaptop()
+	f.Perms = domain.Permissions{"org.freedesktop.NetworkManager.settings.modify.system": false}
+	p := newPump(t, New(f))
+
+	p.send(keyPress('j'))
+	p.send(keyPress('x'))
+	view := p.view()
+	if strings.Contains(view, "Forget") {
+		t.Fatalf("x must not open the forget confirm when modify is denied, got:\n%s", view)
+	}
+	if !strings.Contains(view, "🔒 not permitted (polkit)") {
+		t.Errorf("the status line should explain the polkit denial, got:\n%s", view)
+	}
+	if len(f.DeleteCalls) != 0 {
+		t.Errorf("nothing should be deleted, got %v", f.DeleteCalls)
+	}
+}
+
 func containsCall(calls []string, want string) bool {
 	for _, c := range calls {
 		if c == want {

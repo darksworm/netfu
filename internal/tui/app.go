@@ -163,7 +163,7 @@ func (a App) applyTabs(devices []domain.Device) (App, tea.Cmd) {
 			continue
 		}
 		if _, ok := a.eth[t.device]; !ok {
-			e := ethernet.New(a.backend, t.device)
+			e := ethernet.New(a.backend, t.device).SetPermissions(a.perms)
 			e = a.resizeEthernet(e)
 			a.eth[t.device] = e
 			cmds = append(cmds, e.Init())
@@ -236,9 +236,6 @@ func (a App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case devices.StatusMsg:
 		a.status = a.status.SetMessage(string(msg))
 		return a, nil
-	case ethernet.StatusMsg:
-		a.status = a.status.SetMessage(string(msg))
-		return a, nil
 	case system.StatusMsg:
 		a.status = a.status.SetMessage(string(msg))
 		return a, nil
@@ -261,8 +258,12 @@ func (a App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return a, cmd
 	case permissionsMsg:
 		a.perms = msg.perms
+		a.wifi = a.wifi.SetPermissions(msg.perms)
 		a.conns = a.conns.SetPermissions(msg.perms)
 		a.system = a.system.WithPermissions(msg.perms)
+		for name, e := range a.eth {
+			a.eth[name] = e.SetPermissions(msg.perms)
+		}
 		return a, nil
 	case rescanTickMsg:
 		cmds := []tea.Cmd{rescanTick()}
@@ -299,6 +300,9 @@ func (a App) handleKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	// global and tab bindings would otherwise swallow the typed query.
 	tab := a.currentTab()
 	if tab.kind == tabKindWifi && a.wifi.CapturesInput() {
+		return a.updateActiveScreen(msg)
+	}
+	if tab.kind == tabKindEthernet && a.eth[tab.device].CapturesInput() {
 		return a.updateActiveScreen(msg)
 	}
 	if tab.kind == tabKindOther && a.conns.CapturesInput() {
@@ -372,6 +376,7 @@ func (a App) updateActiveScreen(msg tea.Msg) (tea.Model, tea.Cmd) {
 		a.status = a.status.SetMessage(a.wifi.Status())
 	case tabKindEthernet:
 		a.eth[t.device], cmd = a.eth[t.device].Update(msg)
+		a.status = a.status.SetMessage(a.eth[t.device].Status())
 	case tabKindVirtual:
 		a.devices, cmd = a.devices.Update(msg)
 	case tabKindOther:
