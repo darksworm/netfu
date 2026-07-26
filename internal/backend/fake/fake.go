@@ -2,6 +2,8 @@
 package fake
 
 import (
+	"fmt"
+
 	"github.com/ilmars/netfu/internal/backend"
 	"github.com/ilmars/netfu/internal/domain"
 )
@@ -117,11 +119,13 @@ func (f *Fake) Events() <-chan domain.Event {
 }
 
 func (f *Fake) Activate(connectionID, deviceName string) error {
-	return f.record("Activate")
+	f.Calls = append(f.Calls, fmt.Sprintf("Activate(%s,%s)", connectionID, deviceName))
+	return f.Errs["Activate"]
 }
 
 func (f *Fake) Deactivate(activeConnectionID string) error {
-	return f.record("Deactivate")
+	f.Calls = append(f.Calls, fmt.Sprintf("Deactivate(%s)", activeConnectionID))
+	return f.Errs["Deactivate"]
 }
 
 func (f *Fake) JoinWifi(req domain.JoinRequest) error {

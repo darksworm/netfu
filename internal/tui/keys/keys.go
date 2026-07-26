@@ -40,6 +40,37 @@ func (l List) FullHelp() [][]key.Binding {
 	return [][]key.Binding{{l.Up, l.Down, l.Top, l.Bottom}}
 }
 
+// Devices is the Devices tab keymap: list navigation plus row actions.
+type Devices struct {
+	List
+	Enter      key.Binding
+	Activate   key.Binding
+	Deactivate key.Binding
+	Filter     key.Binding
+}
+
+func DefaultDevices() Devices {
+	return Devices{
+		List: DefaultList(),
+		Enter: key.NewBinding(
+			key.WithKeys("enter"),
+			key.WithHelp("↵", "activate/deactivate"),
+		),
+		Activate: key.NewBinding(
+			key.WithKeys("a"),
+			key.WithHelp("a", "activate"),
+		),
+		Deactivate: key.NewBinding(
+			key.WithKeys("d"),
+			key.WithHelp("d", "deactivate"),
+		),
+		Filter: key.NewBinding(
+			key.WithKeys("/"),
+			key.WithHelp("/", "filter"),
+		),
+	}
+}
+
 type Global struct {
 	Help key.Binding
 	Quit key.Binding

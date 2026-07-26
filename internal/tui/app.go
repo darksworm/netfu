@@ -87,6 +87,9 @@ func (a App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		a.theme = style.NewTheme(msg.IsDark())
 		a.help.Styles = help.DefaultStyles(msg.IsDark())
 		return a, nil
+	case devices.StatusMsg:
+		a.status = a.status.SetMessage(string(msg))
+		return a, nil
 	case permissionsMsg:
 		a.perms = msg.perms
 		return a, nil
