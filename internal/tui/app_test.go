@@ -130,6 +130,77 @@ func TestApp_QuestionMarkTogglesHelpOverlay(t *testing.T) {
 	}
 }
 
+func TestApp_HelpOverlayListsTheActiveScreensKeymap(t *testing.T) {
+	f := fake.SeedArchLaptop()
+	p := newPump(t, New(f))
+
+	p.send(keyPress('?'))
+	view := p.view()
+	for _, want := range []string{"join hidden", "disconnect", "wifi radio"} {
+		if !strings.Contains(view, want) {
+			t.Errorf("on the wifi tab the help overlay should list %q, got:\n%s", want, view)
+		}
+	}
+
+	p.send(keyPress('2'))
+	view = p.view()
+	if !strings.Contains(view, "activate") || !strings.Contains(view, "deactivate") {
+		t.Errorf("on the devices tab the help overlay should list the devices actions, got:\n%s", view)
+	}
+	if strings.Contains(view, "join hidden") {
+		t.Errorf("the devices tab help should not show wifi bindings, got:\n%s", view)
+	}
+}
+
+func TestApp_DevicesConfirmModalOverlaysTheListInsteadOfPushingIt(t *testing.T) {
+	f := fake.SeedArchLaptop()
+	p := newPump(t, New(f))
+	p.send(tea.WindowSizeMsg{Width: 80, Height: 24})
+
+	p.send(keyPress('2'))
+	linesBefore := strings.Count(p.view(), "\n")
+
+	// Enter on the connected wlan0 row asks to deactivate.
+	p.send(tea.KeyPressMsg{Code: tea.KeyEnter})
+
+	view := p.view()
+	if !strings.Contains(view, "Deactivate Our House 1?") {
+		t.Fatalf("the confirm modal should be visible, got:\n%s", view)
+	}
+	if linesAfter := strings.Count(view, "\n"); linesAfter != linesBefore {
+		t.Errorf("the confirm should overlay the list, not push it (lines %d -> %d):\n%s",
+			linesBefore, linesAfter, view)
+	}
+}
+
+func TestApp_AutoRescanTickRequestsScanOnlyWhileWifiTabVisible(t *testing.T) {
+	f := fake.SeedArchLaptop()
+	p := newPump(t, New(f))
+
+	scans := func() int {
+		count := 0
+		for _, call := range f.Calls {
+			if call == "RequestScan" {
+				count++
+			}
+		}
+		return count
+	}
+	before := scans()
+
+	p.send(rescanTickMsg{})
+	if got := scans(); got != before+1 {
+		t.Errorf("a tick on the wifi tab should request a rescan, got %d scans (was %d)", got, before)
+	}
+
+	p.send(keyPress('2'))
+	base := scans()
+	p.send(rescanTickMsg{})
+	if got := scans(); got != base {
+		t.Errorf("a tick away from the wifi tab must not rescan, got %d scans (was %d)", got, base)
+	}
+}
+
 func TestApp_BackendEventMsgRearmsWaitForActivity(t *testing.T) {
 	f := fake.SeedArchLaptop()
 	model := New(f)

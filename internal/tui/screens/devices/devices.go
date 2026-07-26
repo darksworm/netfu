@@ -76,8 +76,17 @@ func (m Model) loadDevices() tea.Msg {
 	return devicesLoadedMsg{devices: managed, active: active, saved: saved, err: err}
 }
 
-func (m Model) Keys() keys.List {
-	return m.keys.List
+func (m Model) Keys() keys.Devices {
+	return m.keys
+}
+
+// Overlay is the open modal's view, layered by the root model over the
+// dimmed list; empty when no modal is open.
+func (m Model) Overlay() string {
+	if m.modal != nil {
+		return m.modal.View()
+	}
+	return ""
 }
 
 // visible is the row model the cursor moves over: the managed devices that
@@ -287,9 +296,6 @@ func (m Model) View() string {
 		} else {
 			lines = append(lines, "  "+row)
 		}
-	}
-	if m.modal != nil {
-		lines = append(lines, strings.Split(m.modal.View(), "\n")...)
 	}
 	if m.height > 0 && len(lines) > m.height {
 		lines = lines[:m.height]

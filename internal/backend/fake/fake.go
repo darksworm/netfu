@@ -19,14 +19,19 @@ type Fake struct {
 
 	// Errs makes the named method fail, e.g. Errs["JoinWifi"] = err.
 	Errs map[string]error
+	// JoinConnectsImmediately scripts a successful activation: JoinWifi
+	// makes the network active and pushes the change event, like NM does
+	// when the credentials are right.
+	JoinConnectsImmediately bool
 	// Calls records every mutator call for assertions.
 	Calls []string
-	// JoinCalls, ActivateCalls, UpdateCalls and AddedSettings capture
-	// mutator arguments for assertions.
-	JoinCalls     []domain.JoinRequest
-	ActivateCalls []ActivateCall
-	UpdateCalls   []UpdateCall
-	AddedSettings []domain.ConnectionSettings
+	// The *Calls slices capture mutator arguments for assertions.
+	JoinCalls           []domain.JoinRequest
+	ActivateCalls       []ActivateCall
+	UpdateCalls         []UpdateCall
+	AddedSettings       []domain.ConnectionSettings
+	DeleteCalls         []string
+	SetWifiEnabledCalls []bool
 
 	events chan domain.Event
 }
@@ -165,9 +170,43 @@ func (f *Fake) Deactivate(activeConnectionID string) error {
 	return f.Errs["Deactivate"]
 }
 
+// JoinWifi mirrors NM's AddAndActivateConnection: the profile is created
+// even when the activation later fails on a wrong password.
 func (f *Fake) JoinWifi(req domain.JoinRequest) error {
 	f.JoinCalls = append(f.JoinCalls, req)
-	return f.record("JoinWifi")
+	if err := f.record("JoinWifi"); err != nil {
+		return err
+	}
+	id := "joined-" + req.SSID
+	f.ConnectionList = append(f.ConnectionList, domain.Connection{ID: id, Name: req.SSID, Type: "802-11-wireless"})
+	f.SettingsByID[id] = domain.ConnectionSettings{
+		"connection":      {"id": req.SSID, "uuid": id, "type": "802-11-wireless"},
+		"802-11-wireless": {"ssid": req.SSID},
+	}
+	if f.JoinConnectsImmediately {
+		f.activateOnWifiDevice(id, req.SSID)
+	}
+	return nil
+}
+
+func (f *Fake) activateOnWifiDevice(connID, name string) {
+	wifiDevice := ""
+	for _, d := range f.DeviceList {
+		if d.Type == domain.DeviceTypeWifi {
+			wifiDevice = d.Name
+			break
+		}
+	}
+	var active []domain.ActiveConnection
+	for _, ac := range f.ActiveList {
+		if ac.DeviceName != wifiDevice {
+			active = append(active, ac)
+		}
+	}
+	f.ActiveList = append(active, domain.ActiveConnection{
+		ID: connID, Name: name, DeviceName: wifiDevice, State: domain.DeviceStateConnected,
+	})
+	f.Push(domain.Event{Kind: domain.EventConnectionChanged})
 }
 
 func (f *Fake) RequestScan() error {
@@ -185,8 +224,19 @@ func (f *Fake) AddConnection(settings domain.ConnectionSettings) error {
 }
 
 func (f *Fake) DeleteConnection(connectionID string) error {
+	f.DeleteCalls = append(f.DeleteCalls, connectionID)
 	f.Calls = append(f.Calls, fmt.Sprintf("DeleteConnection(%s)", connectionID))
-	return f.Errs["DeleteConnection"]
+	if err := f.Errs["DeleteConnection"]; err != nil {
+		return err
+	}
+	for i, c := range f.ConnectionList {
+		if c.ID == connectionID {
+			f.ConnectionList = append(f.ConnectionList[:i], f.ConnectionList[i+1:]...)
+			break
+		}
+	}
+	delete(f.SettingsByID, connectionID)
+	return nil
 }
 
 func (f *Fake) SetHostname(hostname string) error {
@@ -199,6 +249,7 @@ func (f *Fake) SetHostname(hostname string) error {
 }
 
 func (f *Fake) SetWifiEnabled(enabled bool) error {
+	f.SetWifiEnabledCalls = append(f.SetWifiEnabledCalls, enabled)
 	f.Calls = append(f.Calls, fmt.Sprintf("SetWifiEnabled(%t)", enabled))
 	return f.Errs["SetWifiEnabled"]
 }

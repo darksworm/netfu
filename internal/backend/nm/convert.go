@@ -213,9 +213,9 @@ func reasonFromNM(r gonm.NmDeviceStateReason) string {
 	case gonm.NmDeviceStateReasonNone:
 		return ""
 	case gonm.NmDeviceStateReasonNoSecrets:
-		return "no-secrets"
+		return domain.ReasonNoSecrets
 	case gonm.NmDeviceStateReasonSupplicantDisconnect:
-		return "supplicant-disconnect"
+		return domain.ReasonSupplicantDisconnect
 	default:
 		return r.String()
 	}

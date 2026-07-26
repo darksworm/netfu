@@ -10,3 +10,11 @@ type permissionsMsg struct {
 	perms domain.Permissions
 	err   error
 }
+
+// radioResultMsg reports the SetWifiEnabled call's outcome.
+type radioResultMsg struct {
+	err error
+}
+
+// rescanTickMsg fires the periodic wifi rescan.
+type rescanTickMsg struct{}

@@ -71,9 +71,19 @@ func DefaultDevices() Devices {
 	}
 }
 
+func (d Devices) ShortHelp() []key.Binding {
+	return append(d.List.ShortHelp(), d.Enter, d.Filter)
+}
+
+func (d Devices) FullHelp() [][]key.Binding {
+	return append(d.List.FullHelp(), []key.Binding{d.Enter, d.Activate, d.Deactivate, d.Filter})
+}
+
 type Wifi struct {
 	List
 	Connect     key.Binding
+	JoinHidden  key.Binding
+	Deactivate  key.Binding
 	Filter      key.Binding
 	ClearFilter key.Binding
 }
@@ -84,6 +94,14 @@ func DefaultWifi() Wifi {
 		Connect: key.NewBinding(
 			key.WithKeys("enter"),
 			key.WithHelp("↵", "connect"),
+		),
+		JoinHidden: key.NewBinding(
+			key.WithKeys("c"),
+			key.WithHelp("c", "join hidden"),
+		),
+		Deactivate: key.NewBinding(
+			key.WithKeys("d"),
+			key.WithHelp("d", "disconnect"),
 		),
 		Filter: key.NewBinding(
 			key.WithKeys("/"),
@@ -101,7 +119,7 @@ func (w Wifi) ShortHelp() []key.Binding {
 }
 
 func (w Wifi) FullHelp() [][]key.Binding {
-	return append(w.List.FullHelp(), []key.Binding{w.Connect, w.Filter, w.ClearFilter})
+	return append(w.List.FullHelp(), []key.Binding{w.Connect, w.JoinHidden, w.Deactivate, w.Filter, w.ClearFilter})
 }
 
 // System is the System tab keymap: list navigation over the settings
@@ -239,11 +257,12 @@ func (e Editor) FullHelp() [][]key.Binding {
 }
 
 type Global struct {
-	Help    key.Binding
-	Quit    key.Binding
-	Tabs    key.Binding
-	NextTab key.Binding
-	PrevTab key.Binding
+	Help      key.Binding
+	Quit      key.Binding
+	Tabs      key.Binding
+	NextTab   key.Binding
+	PrevTab   key.Binding
+	WifiRadio key.Binding
 }
 
 func DefaultGlobal() Global {
@@ -268,6 +287,10 @@ func DefaultGlobal() Global {
 			key.WithKeys("["),
 			key.WithHelp("[", "prev tab"),
 		),
+		WifiRadio: key.NewBinding(
+			key.WithKeys("W"),
+			key.WithHelp("W", "wifi radio"),
+		),
 	}
 }
 
@@ -276,5 +299,5 @@ func (g Global) ShortHelp() []key.Binding {
 }
 
 func (g Global) FullHelp() [][]key.Binding {
-	return [][]key.Binding{{g.Tabs, g.NextTab, g.PrevTab, g.Help, g.Quit}}
+	return [][]key.Binding{{g.Tabs, g.NextTab, g.PrevTab, g.WifiRadio, g.Help, g.Quit}}
 }
