@@ -1,5 +1,6 @@
-// Package connections is the Connections tab: every saved profile grouped
-// by type, with edit/delete/new actions.
+// Package connections is the Other tab: saved profiles without their own
+// tab (vpn, bridge, bond, vlan, orphaned wired profiles) grouped by type,
+// with edit/delete/new actions.
 package connections
 
 import (
@@ -74,7 +75,28 @@ func (m Model) load() tea.Msg {
 	if err == nil {
 		err = devicesErr
 	}
-	return loadedMsg{conns: conns, active: active, devices: devices, err: err}
+	return loadedMsg{conns: profilesWithoutOwnTab(conns, devices), active: active, devices: devices, err: err}
+}
+
+// profilesWithoutOwnTab is the Other tab's row model: wifi profiles live on
+// the wifi device tab and wired profiles on their NIC's tab, so this keeps
+// the rest — vpn, bridge, bond, vlan — plus wired profiles with no NIC to
+// live on.
+func profilesWithoutOwnTab(conns []domain.Connection, devices []domain.Device) []domain.Connection {
+	nicPresent := false
+	for _, d := range devices {
+		if d.Managed && d.Type == domain.DeviceTypeEthernet {
+			nicPresent = true
+		}
+	}
+	var out []domain.Connection
+	for _, c := range conns {
+		if c.Type == "802-11-wireless" || (c.Type == "802-3-ethernet" && nicPresent) {
+			continue
+		}
+		out = append(out, c)
+	}
+	return out
 }
 
 // Keys returns the keymap for the help footer: the editor's while it is

@@ -1,5 +1,6 @@
-// Package devices is the Devices tab: managed devices with state and
-// active connection, plus activate/deactivate actions.
+// Package devices is the Virtual tab: managed devices without their own
+// tab (bridges, veth, tun, ...) with state and active connection, plus
+// activate/deactivate actions.
 package devices
 
 import (
@@ -58,12 +59,13 @@ func (m Model) loadDevices() tea.Msg {
 	all, err := m.backend.Devices()
 	var managed []domain.Device
 	for _, d := range all {
-		if d.Managed {
+		// Physical devices have their own tabs; p2p-dev-* pseudo-devices
+		// are wifi-p2p noise. Neither belongs on the Virtual tab.
+		if d.Managed && !strings.HasPrefix(d.Name, "p2p-dev-") {
 			managed = append(managed, d)
 		}
 	}
-	groups := domain.GroupDevices(managed)
-	managed = append(groups.Physical, groups.Virtual...)
+	managed = domain.GroupDevices(managed).Virtual
 	active, activeErr := m.backend.ActiveConnections()
 	if err == nil {
 		err = activeErr

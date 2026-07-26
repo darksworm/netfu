@@ -627,6 +627,97 @@ func TestWifi_DeactivateCurrentNetworkWithD(t *testing.T) {
 	}
 }
 
+func TestWifi_EOnSavedNetworkOpensTheProfileEditor(t *testing.T) {
+	f := fake.SeedArchLaptop()
+	p := newPump(t, New(f))
+
+	if got := p.app().wifi.Selected().SSID; got != "Our House 1" {
+		t.Fatalf("precondition: cursor should be on the saved active network, got %q", got)
+	}
+
+	p.send(keyPress('e'))
+	view := p.view()
+	if !strings.Contains(view, "Autoconnect") || !strings.Contains(view, "SSID") {
+		t.Fatalf("e on a saved network should push its profile editor, got:\n%s", view)
+	}
+	if name := lineContaining(t, view, "Name"); !strings.Contains(name, "Our House 1") {
+		t.Errorf("the editor should load the saved profile, got: %q", name)
+	}
+
+	p.send(keyPress('q'))
+	if containsQuit(p.msgs) {
+		t.Fatal("q inside the editor should pop it, not quit the app")
+	}
+	if view := p.view(); strings.Contains(view, "Autoconnect") {
+		t.Errorf("q should have popped the editor back to the scan list, got:\n%s", view)
+	}
+}
+
+func TestWifi_EOnAnUnsavedNetworkDoesNothing(t *testing.T) {
+	f := fake.SeedArchLaptop()
+	p := newPump(t, New(f))
+
+	p.send(keyPress('j'))
+	p.send(keyPress('j'))
+	if got := p.app().wifi.Selected().SSID; got != "Neighbors" {
+		t.Fatalf("precondition: cursor should be on Neighbors, got %q", got)
+	}
+
+	p.send(keyPress('e'))
+	if view := p.view(); strings.Contains(view, "Autoconnect") {
+		t.Errorf("an unsaved network has no profile to edit, got:\n%s", view)
+	}
+}
+
+func TestWifi_XForgetsSavedNetworkAfterConfirm(t *testing.T) {
+	f := fake.SeedArchLaptop()
+	p := newPump(t, New(f))
+
+	p.send(keyPress('j'))
+	if got := p.app().wifi.Selected().SSID; got != "Our House 5G" {
+		t.Fatalf("precondition: cursor should be on Our House 5G, got %q", got)
+	}
+
+	p.send(keyPress('x'))
+	view := p.view()
+	if !strings.Contains(view, "Forget Our House 5G?") {
+		t.Fatalf("x on a saved network should ask for confirmation, got:\n%s", view)
+	}
+
+	p.send(keyPress('n'))
+	if len(f.DeleteCalls) != 0 {
+		t.Fatal("declining the confirm must not delete the profile")
+	}
+
+	p.send(keyPress('x'))
+	p.send(keyPress('y'))
+	if len(f.DeleteCalls) != 1 || f.DeleteCalls[0] != "our-house-5g" {
+		t.Errorf("confirming should delete the saved profile, got deletes %v", f.DeleteCalls)
+	}
+	if row := lineContaining(t, p.view(), "Our House 5G"); strings.Contains(row, "⋆ saved") {
+		t.Errorf("the forgotten network should lose its saved tag, got: %s", row)
+	}
+}
+
+func TestWifi_XOnAnUnsavedNetworkDoesNothing(t *testing.T) {
+	f := fake.SeedArchLaptop()
+	p := newPump(t, New(f))
+
+	p.send(keyPress('j'))
+	p.send(keyPress('j'))
+	if got := p.app().wifi.Selected().SSID; got != "Neighbors" {
+		t.Fatalf("precondition: cursor should be on Neighbors, got %q", got)
+	}
+
+	p.send(keyPress('x'))
+	if view := p.view(); strings.Contains(view, "Forget") {
+		t.Errorf("an unsaved network has no profile to forget, got:\n%s", view)
+	}
+	if len(f.DeleteCalls) != 0 {
+		t.Errorf("nothing should be deleted, got %v", f.DeleteCalls)
+	}
+}
+
 func containsCall(calls []string, want string) bool {
 	for _, c := range calls {
 		if c == want {

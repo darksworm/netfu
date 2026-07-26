@@ -17,7 +17,7 @@ func TestSmoke_BootShowsWifiHomeTabAndQExitsCleanly(t *testing.T) {
 		teatest.WithInitialTermSize(80, 24))
 
 	teatest.WaitFor(t, tm.Output(), func(bts []byte) bool {
-		return bytes.Contains(bts, []byte("[1] Wi-Fi")) &&
+		return bytes.Contains(bts, []byte("[1] wlan0")) &&
 			bytes.Contains(bts, []byte("Our House 1"))
 	}, teatest.WithDuration(3*time.Second))
 

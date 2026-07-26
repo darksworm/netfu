@@ -89,6 +89,8 @@ type Wifi struct {
 	Connect     key.Binding
 	JoinHidden  key.Binding
 	Deactivate  key.Binding
+	Edit        key.Binding
+	Forget      key.Binding
 	Filter      key.Binding
 	ClearFilter key.Binding
 }
@@ -108,6 +110,14 @@ func DefaultWifi() Wifi {
 			key.WithKeys("d"),
 			key.WithHelp("d", "disconnect"),
 		),
+		Edit: key.NewBinding(
+			key.WithKeys("e"),
+			key.WithHelp("e", "edit profile"),
+		),
+		Forget: key.NewBinding(
+			key.WithKeys("x"),
+			key.WithHelp("x", "forget"),
+		),
 		Filter: key.NewBinding(
 			key.WithKeys("/"),
 			key.WithHelp("/", "filter"),
@@ -124,17 +134,44 @@ func (w Wifi) ShortHelp() []key.Binding {
 }
 
 func (w Wifi) FullHelp() [][]key.Binding {
-	return append(w.List.FullHelp(), []key.Binding{w.Connect, w.JoinHidden, w.Deactivate, w.Filter, w.ClearFilter})
+	return append(w.List.FullHelp(),
+		[]key.Binding{w.Connect, w.JoinHidden, w.Deactivate, w.Edit, w.Forget, w.Filter, w.ClearFilter})
+}
+
+// Ethernet is a wired device tab's keymap: just the two device actions —
+// the tab is a detail view, not a list.
+type Ethernet struct {
+	Activate   key.Binding
+	Deactivate key.Binding
+}
+
+func DefaultEthernet() Ethernet {
+	return Ethernet{
+		Activate: key.NewBinding(
+			key.WithKeys("a"),
+			key.WithHelp("a", "activate"),
+		),
+		Deactivate: key.NewBinding(
+			key.WithKeys("d"),
+			key.WithHelp("d", "deactivate"),
+		),
+	}
+}
+
+func (e Ethernet) ShortHelp() []key.Binding {
+	return []key.Binding{e.Activate, e.Deactivate}
+}
+
+func (e Ethernet) FullHelp() [][]key.Binding {
+	return [][]key.Binding{{e.Activate, e.Deactivate}}
 }
 
 // System is the System tab keymap: list navigation over the settings
-// fields and the active-connections rows, plus their contextual actions.
+// fields plus their contextual actions.
 type System struct {
 	List
-	Edit       key.Binding
-	Toggle     key.Binding
-	Activate   key.Binding
-	Deactivate key.Binding
+	Edit   key.Binding
+	Toggle key.Binding
 }
 
 func DefaultSystem() System {
@@ -148,23 +185,15 @@ func DefaultSystem() System {
 			key.WithKeys("space"),
 			key.WithHelp("space", "toggle"),
 		),
-		Activate: key.NewBinding(
-			key.WithKeys("a"),
-			key.WithHelp("a", "activate"),
-		),
-		Deactivate: key.NewBinding(
-			key.WithKeys("d"),
-			key.WithHelp("d", "deactivate"),
-		),
 	}
 }
 
 func (s System) ShortHelp() []key.Binding {
-	return append(s.List.ShortHelp(), s.Edit, s.Activate, s.Deactivate)
+	return append(s.List.ShortHelp(), s.Edit, s.Toggle)
 }
 
 func (s System) FullHelp() [][]key.Binding {
-	return append(s.List.FullHelp(), []key.Binding{s.Edit, s.Toggle, s.Activate, s.Deactivate})
+	return append(s.List.FullHelp(), []key.Binding{s.Edit, s.Toggle})
 }
 
 // Connections is the Connections tab keymap: list navigation plus
@@ -281,8 +310,8 @@ func DefaultGlobal() Global {
 			key.WithHelp("q", "quit"),
 		),
 		Tabs: key.NewBinding(
-			key.WithKeys("1", "2", "3", "4"),
-			key.WithHelp("1-4", "tab"),
+			key.WithKeys("1", "2", "3", "4", "5", "6", "7", "8", "9"),
+			key.WithHelp("1-9", "tab"),
 		),
 		NextTab: key.NewBinding(
 			key.WithKeys("]"),

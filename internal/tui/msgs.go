@@ -24,3 +24,9 @@ type radioResultMsg struct {
 
 // rescanTickMsg fires the periodic wifi rescan.
 type rescanTickMsg struct{}
+
+// tabsMsg carries the device set the tab bar is derived from.
+type tabsMsg struct {
+	devices []domain.Device
+	err     error
+}

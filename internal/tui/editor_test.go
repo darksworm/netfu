@@ -15,7 +15,7 @@ import (
 )
 
 // seedProfiles returns the arch laptop fixture extended with an ethernet and
-// a VPN profile, so the Connections tab has every group to show.
+// two VPN profiles, so the Other tab has grouped rows to show.
 func seedProfiles() *fake.Fake {
 	f := fake.SeedArchLaptop()
 	f.ConnectionList = append(f.ConnectionList,
@@ -24,15 +24,19 @@ func seedProfiles() *fake.Fake {
 			LastUsedUnix: time.Date(2026, 6, 30, 12, 0, 0, 0, time.UTC).Unix(),
 		},
 		domain.Connection{ID: "work-vpn", Name: "Work VPN", Type: "vpn"},
+		domain.Connection{
+			ID: "old-vpn", Name: "Old VPN", Type: "vpn",
+			LastUsedUnix: time.Date(2026, 6, 30, 12, 0, 0, 0, time.UTC).Unix(),
+		},
 	)
 	return f
 }
 
-func TestEditor_ListShowsAllProfilesGroupedByType(t *testing.T) {
+func TestOther_ListsOnlyProfilesWithoutTheirOwnTab(t *testing.T) {
 	f := seedProfiles()
 	p := newPump(t, New(f))
 
-	p.send(keyPress('3'))
+	p.send(keyPress('4'))
 	view := p.view()
 
 	for _, col := range []string{"NAME", "TYPE", "DEVICE", "LAST USED"} {
@@ -40,27 +44,47 @@ func TestEditor_ListShowsAllProfilesGroupedByType(t *testing.T) {
 			t.Errorf("list should have a %s column header, got:\n%s", col, view)
 		}
 	}
-	for _, group := range []string{"─ Wi-Fi ─", "─ Ethernet ─", "─ VPN ─"} {
+	for _, group := range []string{"─ VPN ─", "─ Bridge ─"} {
 		if !strings.Contains(view, group) {
 			t.Errorf("profiles should be grouped under %q, got:\n%s", group, view)
 		}
 	}
-	for _, name := range []string{"Our House 1", "Our House 5G", "Summer House", "Office LAN", "Work VPN"} {
+	for _, name := range []string{"Work VPN", "Old VPN", "docker0"} {
 		if !strings.Contains(view, name) {
-			t.Errorf("all profiles should be listed, missing %q in:\n%s", name, view)
+			t.Errorf("vpn and bridge profiles belong here, missing %q in:\n%s", name, view)
+		}
+	}
+	// Wifi profiles live on the wifi device tab, wired profiles on their
+	// NIC's tab — neither belongs under Other.
+	for _, elsewhere := range []string{"Our House 1", "Our House 5G", "Summer House", "Office LAN", "─ Wi-Fi ─", "─ Ethernet ─"} {
+		if strings.Contains(view, elsewhere) {
+			t.Errorf("%q has its own tab and should not be listed under Other, got:\n%s", elsewhere, view)
 		}
 	}
 
-	active := lineContaining(t, view, "Our House 1")
-	if !strings.Contains(active, "wlan0") || !strings.Contains(active, "✓") {
-		t.Errorf("the active profile should show its device and an active mark, got: %q", active)
+	active := lineContaining(t, view, "docker0")
+	if !strings.Contains(active, "✓") {
+		t.Errorf("the active profile should show an active mark, got: %q", active)
 	}
-	ethernet := lineContaining(t, view, "Office LAN")
-	if !strings.Contains(ethernet, "2026-06-30") {
-		t.Errorf("a profile's last successful activation date should show, got: %q", ethernet)
+	if used := lineContaining(t, view, "Old VPN"); !strings.Contains(used, "2026-06-30") {
+		t.Errorf("a profile's last successful activation date should show, got: %q", used)
 	}
 	if never := lineContaining(t, view, "Work VPN"); !strings.Contains(never, "never") {
 		t.Errorf("a never-used profile should say so, got: %q", never)
+	}
+}
+
+func TestOther_ListsWiredProfilesWhenNoEthernetNICIsPresent(t *testing.T) {
+	f := seedProfiles()
+	f.DeviceList = slices.Delete(f.DeviceList, 1, 2) // no enp0s31f6
+	p := newPump(t, New(f))
+
+	p.send(keyPress('3')) // Virtual moved up: wlan0, Virtual, Other, System
+	if got := p.app().currentTab(); got.kind != tabKindOther {
+		t.Fatalf("precondition: without a wired NIC the Other tab is third, got %+v", got)
+	}
+	if view := p.view(); !strings.Contains(view, "Office LAN") {
+		t.Errorf("a wired profile with no NIC to live on should fall back to Other, got:\n%s", view)
 	}
 }
 
@@ -68,15 +92,15 @@ func TestEditor_DeleteConfirmOverlaysEvenWhenTheListOverflowsThePane(t *testing.
 	f := seedProfiles()
 	for i := range 30 {
 		f.ConnectionList = append(f.ConnectionList,
-			domain.Connection{ID: fmt.Sprintf("wifi-%d", i), Name: fmt.Sprintf("Cafe %d", i), Type: "802-11-wireless"})
+			domain.Connection{ID: fmt.Sprintf("vpn-%d", i), Name: fmt.Sprintf("Exit Node %d", i), Type: "vpn"})
 	}
 	p := newPump(t, New(f))
 	p.send(tea.WindowSizeMsg{Width: 80, Height: 24})
 
-	p.send(keyPress('3'))
+	p.send(keyPress('4'))
 	p.send(keyPress('x'))
 
-	if view := p.view(); !strings.Contains(view, "Delete Our House 1?") {
+	if view := p.view(); !strings.Contains(view, "Delete Work VPN?") {
 		t.Fatalf("the delete confirm must overlay the list, not render below the fold, got:\n%s", view)
 	}
 }
@@ -85,12 +109,12 @@ func TestEditor_ListScrollsSoTheCursorRowStaysVisible(t *testing.T) {
 	f := seedProfiles()
 	for i := range 30 {
 		f.ConnectionList = append(f.ConnectionList,
-			domain.Connection{ID: fmt.Sprintf("wifi-%d", i), Name: fmt.Sprintf("Cafe %d", i), Type: "802-11-wireless"})
+			domain.Connection{ID: fmt.Sprintf("vpn-%d", i), Name: fmt.Sprintf("Exit Node %d", i), Type: "vpn"})
 	}
 	p := newPump(t, New(f))
 	p.send(tea.WindowSizeMsg{Width: 80, Height: 24})
 
-	p.send(keyPress('3'))
+	p.send(keyPress('4'))
 	p.send(keyPress('G'))
 
 	if got := p.app().conns.Selected().Name; got != "docker0" {
@@ -105,20 +129,20 @@ func TestEditor_DeleteConnectionAsksConfirmThenCallsDelete(t *testing.T) {
 	f := seedProfiles()
 	p := newPump(t, New(f))
 
-	p.send(keyPress('3'))
+	p.send(keyPress('4'))
 	p.send(keyPress('x'))
-	if view := p.view(); !strings.Contains(view, "Delete Our House 1?") {
+	if view := p.view(); !strings.Contains(view, "Delete Work VPN?") {
 		t.Fatalf("x should ask for confirmation first, got:\n%s", view)
 	}
-	if slices.Contains(f.Calls, "DeleteConnection(our-house-1)") {
+	if slices.Contains(f.Calls, "DeleteConnection(work-vpn)") {
 		t.Fatal("nothing should be deleted before the user confirms")
 	}
 
 	p.send(keyPress('y'))
-	if !slices.Contains(f.Calls, "DeleteConnection(our-house-1)") {
+	if !slices.Contains(f.Calls, "DeleteConnection(work-vpn)") {
 		t.Errorf("confirming should delete the profile, calls: %v", f.Calls)
 	}
-	if view := p.view(); strings.Contains(view, "Delete Our House 1?") {
+	if view := p.view(); strings.Contains(view, "Delete Work VPN?") {
 		t.Errorf("confirming should close the modal, got:\n%s", view)
 	}
 }
@@ -150,12 +174,12 @@ func TestEditor_OpenProfileLoadsSettingsIntoTypedForm(t *testing.T) {
 	f := seedStaticWifiProfile()
 	p := newPump(t, New(f))
 
-	p.send(keyPress('3'))
+	// e on the wifi tab's saved active network pushes its profile editor.
 	p.send(keyPress('e'))
 	view := p.view()
 
-	if strings.Contains(view, "LAST USED") {
-		t.Errorf("the editor should replace the list, got:\n%s", view)
+	if strings.Contains(view, "▂▄▆█") {
+		t.Errorf("the editor should replace the scan list, got:\n%s", view)
 	}
 	for _, section := range []string{"General", "Wi-Fi", "IPv4", "IPv6"} {
 		if !strings.Contains(view, section) {
@@ -210,7 +234,6 @@ func TestEditor_EditingAutoconnectAndNameWritesBackViaUpdateSettings(t *testing.
 	f := seedStaticWifiProfile()
 	p := newPump(t, New(f))
 
-	p.send(keyPress('3'))
 	p.send(keyPress('e'))
 
 	// Rename: EDIT mode on the Name field, append to the existing value.
@@ -244,8 +267,8 @@ func TestEditor_EditingAutoconnectAndNameWritesBackViaUpdateSettings(t *testing.
 	}
 
 	view := p.view()
-	if !strings.Contains(view, "LAST USED") {
-		t.Errorf("a successful save should pop back to the list, got:\n%s", view)
+	if !strings.Contains(view, "▂▄▆█") {
+		t.Errorf("a successful save should pop back to the scan list, got:\n%s", view)
 	}
 	if !strings.Contains(view, "✓ saved Our House 1") {
 		t.Errorf("the status line should report the save, got:\n%s", view)
@@ -256,7 +279,6 @@ func TestEditor_InvalidIPv4StaticAddressBlocksSaveWithFieldError(t *testing.T) {
 	f := seedStaticWifiProfile()
 	p := newPump(t, New(f))
 
-	p.send(keyPress('3'))
 	p.send(keyPress('e'))
 
 	// Down to the Address field: Name, Autoconnect, SSID, Security, Method.
@@ -288,7 +310,7 @@ func TestEditor_NewEthernetProfileWizardCallsAddConnection(t *testing.T) {
 	f := seedProfiles()
 	p := newPump(t, New(f))
 
-	p.send(keyPress('3'))
+	p.send(keyPress('4'))
 	p.send(keyPress('n'))
 
 	view := p.view()
@@ -336,7 +358,7 @@ func TestEditor_EditGreyedOutWhenModifySystemPermissionDenied(t *testing.T) {
 	f.Perms = domain.Permissions{"org.freedesktop.NetworkManager.settings.modify.system": false}
 	p := newPump(t, New(f))
 
-	p.send(keyPress('3'))
+	p.send(keyPress('4'))
 	if view := p.view(); !strings.Contains(view, "🔒") {
 		t.Errorf("denied modify actions should render locked, got:\n%s", view)
 	}
@@ -364,14 +386,13 @@ func TestEditor_EscWithDirtyFormAsksSaveOrDiscard(t *testing.T) {
 	f := seedStaticWifiProfile()
 	p := newPump(t, New(f))
 
-	p.send(keyPress('3'))
 	p.send(keyPress('e'))
 	p.send(keyPress('j'))
 	p.send(tea.KeyPressMsg{Code: tea.KeySpace, Text: " "}) // dirty: flip autoconnect
 
 	p.send(tea.KeyPressMsg{Code: tea.KeyEsc})
 	view := p.view()
-	if strings.Contains(view, "LAST USED") {
+	if strings.Contains(view, "▂▄▆█") {
 		t.Fatalf("esc on a dirty form must not silently discard, got:\n%s", view)
 	}
 	if !strings.Contains(view, "Unsaved changes") {
@@ -379,35 +400,34 @@ func TestEditor_EscWithDirtyFormAsksSaveOrDiscard(t *testing.T) {
 	}
 
 	p.send(keyPress('d'))
-	if view := p.view(); !strings.Contains(view, "LAST USED") {
-		t.Errorf("discarding should pop back to the list, got:\n%s", view)
+	if view := p.view(); !strings.Contains(view, "▂▄▆█") {
+		t.Errorf("discarding should pop back to the scan list, got:\n%s", view)
 	}
 	if len(f.UpdateCalls) != 0 {
 		t.Errorf("discarding must not write anything, got: %#v", f.UpdateCalls)
 	}
 }
 
-func TestEditor_ActivateAndDeactivateFromConnectionsList(t *testing.T) {
+func TestEditor_ActivateAndDeactivateFromOtherList(t *testing.T) {
 	f := seedProfiles()
 	p := newPump(t, New(f))
 
-	p.send(keyPress('3'))
-	// Down to Office LAN, past the three wifi profiles.
-	for range 3 {
-		p.send(keyPress('j'))
+	p.send(keyPress('4'))
+	if got := p.app().conns.Selected().Name; got != "Work VPN" {
+		t.Fatalf("precondition: cursor should be on Work VPN, got %q", got)
 	}
 	p.send(keyPress('a'))
-	if !slices.Contains(f.Calls, "Activate(office-lan,enp0s31f6)") {
-		t.Errorf("a should activate the profile on the matching device, calls: %v", f.Calls)
+	if !slices.Contains(f.Calls, "Activate(work-vpn,)") {
+		t.Errorf("a should activate the VPN profile letting NM pick the device, calls: %v", f.Calls)
 	}
 
-	p.send(keyPress('g'))
+	p.send(keyPress('G'))
 	p.send(keyPress('d'))
-	if view := p.view(); !strings.Contains(view, "Deactivate Our House 1?") {
+	if view := p.view(); !strings.Contains(view, "Deactivate docker0?") {
 		t.Fatalf("d should confirm before deactivating, got:\n%s", view)
 	}
 	p.send(keyPress('y'))
-	if !slices.Contains(f.Calls, "Deactivate(our-house-1)") {
+	if !slices.Contains(f.Calls, "Deactivate(docker0)") {
 		t.Errorf("confirming should deactivate the profile, calls: %v", f.Calls)
 	}
 }

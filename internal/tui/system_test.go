@@ -11,17 +11,17 @@ import (
 	"github.com/ilmars/netfu/internal/domain"
 )
 
-func TestVPN_ExistingVPNProfileCanBeActivatedAndDeactivated(t *testing.T) {
+func TestVPN_ExistingVPNProfileCanBeActivatedAndDeactivatedFromOther(t *testing.T) {
 	f := fake.SeedArchLaptop()
 	f.ConnectionList = append(f.ConnectionList, domain.Connection{ID: "work-vpn", Name: "Work VPN", Type: "vpn"})
 	p := newPump(t, New(f))
 
 	p.send(keyPress('4'))
 	if view := p.view(); !strings.Contains(view, "Work VPN") {
-		t.Fatalf("System tab should list the saved VPN profile, got:\n%s", view)
+		t.Fatalf("the Other tab should list the saved VPN profile, got:\n%s", view)
 	}
 
-	p.send(keyPress('G'))
+	p.send(keyPress('g'))
 	p.send(keyPress('a'))
 	if len(f.ActivateCalls) != 1 || f.ActivateCalls[0].ConnectionID != "work-vpn" {
 		t.Fatalf("a on the VPN row should activate it, calls: %#v", f.ActivateCalls)
@@ -33,10 +33,34 @@ func TestVPN_ExistingVPNProfileCanBeActivatedAndDeactivated(t *testing.T) {
 	f.Push(domain.Event{Kind: domain.EventConnectionChanged})
 	p.deliverNext()
 
-	p.send(keyPress('G'))
+	if row := lineContaining(t, p.view(), "Work VPN"); !strings.Contains(row, "✓") {
+		t.Fatalf("the active VPN row should show its active mark, got: %s", row)
+	}
+	p.send(keyPress('g'))
 	p.send(keyPress('d'))
+	p.send(keyPress('y'))
 	if !slices.Contains(f.Calls, "Deactivate(work-vpn)") {
-		t.Errorf("d on the active VPN row should deactivate it, calls: %v", f.Calls)
+		t.Errorf("d on the active VPN row should deactivate it after confirm, calls: %v", f.Calls)
+	}
+}
+
+func TestSystem_StaysPureSettingsWithoutAnActiveConnectionsSection(t *testing.T) {
+	f := fake.SeedArchLaptop()
+	f.ConnectionList = append(f.ConnectionList, domain.Connection{ID: "work-vpn", Name: "Work VPN", Type: "vpn"})
+	p := newPump(t, New(f))
+
+	p.send(keyPress('5'))
+	view := p.view()
+	if strings.Contains(view, "Active connections") {
+		t.Errorf("connection activation lives on Other now; System should drop the section, got:\n%s", view)
+	}
+	if strings.Contains(view, "Work VPN") || strings.Contains(view, "Our House 1") {
+		t.Errorf("System should show settings only, not connections, got:\n%s", view)
+	}
+	for _, want := range []string{"Hostname", "Wi-Fi radio", "NetworkManager:"} {
+		if !strings.Contains(view, want) {
+			t.Errorf("System should keep %q, got:\n%s", want, view)
+		}
 	}
 }
 
@@ -44,7 +68,7 @@ func TestHostname_ShowsCurrentAndSavesNewName(t *testing.T) {
 	f := fake.SeedArchLaptop()
 	p := newPump(t, New(f))
 
-	p.send(keyPress('4'))
+	p.send(keyPress('5'))
 	if view := p.view(); !strings.Contains(view, "archbook") {
 		t.Fatalf("System tab should show the current hostname, got:\n%s", view)
 	}
@@ -73,7 +97,7 @@ func TestHostname_ScreenGreyedOutWhenPolkitDenies(t *testing.T) {
 	f.Perms = domain.Permissions{"org.freedesktop.NetworkManager.settings.modify.hostname": false}
 	p := newPump(t, New(f))
 
-	p.send(keyPress('4'))
+	p.send(keyPress('5'))
 	if view := p.view(); !strings.Contains(view, "🔒") {
 		t.Errorf("the hostname field should render locked when polkit denies, got:\n%s", view)
 	}

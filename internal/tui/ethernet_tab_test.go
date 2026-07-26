@@ -4,35 +4,71 @@ import (
 	"slices"
 	"strings"
 	"testing"
-
-	tea "charm.land/bubbletea/v2"
+	"time"
 
 	"github.com/ilmars/netfu/internal/backend/fake"
 	"github.com/ilmars/netfu/internal/domain"
 )
 
-func TestDevices_ActivateSavedProfileOnDisconnectedEthernet(t *testing.T) {
-	f := fake.SeedArchLaptop()
-	f.DeviceList[1].State = domain.DeviceStateDisconnected
-	f.ConnectionList = append(f.ConnectionList,
-		domain.Connection{ID: "wired-1", Name: "Wired 1", Type: "802-3-ethernet"})
+func TestEthernet_TabShowsDeviceDetail(t *testing.T) {
+	f := seedWiredConnected()
 	p := newPump(t, New(f))
 
 	p.send(keyPress('2'))
-	p.send(keyPress('j'))
+	view := p.view()
+	for _, want := range []string{
+		"Device enp0s31f6",
+		"Type:", "ethernet",
+		"State:", "connected",
+		"Active connection:", "Wired 1",
+	} {
+		if !strings.Contains(view, want) {
+			t.Errorf("the ethernet tab should show %q, got:\n%s", want, view)
+		}
+	}
+}
+
+func TestEthernet_AActivatesTheBestMatchingWiredProfile(t *testing.T) {
+	f := fake.SeedArchLaptop()
+	f.DeviceList[1].State = domain.DeviceStateDisconnected
+	f.ConnectionList = append(f.ConnectionList,
+		domain.Connection{ID: "wired-old", Name: "Old Wired", Type: "802-3-ethernet",
+			LastUsedUnix: time.Date(2024, 1, 1, 0, 0, 0, 0, time.UTC).Unix()},
+		domain.Connection{ID: "wired-1", Name: "Wired 1", Type: "802-3-ethernet",
+			LastUsedUnix: time.Date(2026, 6, 30, 0, 0, 0, 0, time.UTC).Unix()},
+	)
+	p := newPump(t, New(f))
+
+	p.send(keyPress('2'))
 	p.send(keyPress('a'))
 
 	if !slices.Contains(f.Calls, "Activate(wired-1,enp0s31f6)") {
-		t.Errorf("a should activate the matching saved profile on the device, calls: %v", f.Calls)
+		t.Errorf("a should activate the most recently used wired profile on the device, calls: %v", f.Calls)
 	}
 
-	// NM reports progress through a device-state event; the row follows it.
+	// NM reports progress through a device-state event; the detail follows it.
 	f.DeviceList[1].State = domain.DeviceStateConnecting
 	f.Push(domain.Event{Kind: domain.EventDeviceChanged, DeviceName: "enp0s31f6"})
 	p.deliverNext()
 
-	if row := lineContaining(t, p.view(), "enp0s31f6"); !strings.Contains(row, "connecting") {
-		t.Errorf("row should show the activating state after the device event, got: %s", row)
+	if row := lineContaining(t, p.view(), "State:"); !strings.Contains(row, "connecting") {
+		t.Errorf("the detail should show the new device state, got: %s", row)
+	}
+}
+
+func TestEthernet_AWithoutAWiredProfileExplainsInsteadOfActivating(t *testing.T) {
+	f := fake.SeedArchLaptop()
+	f.DeviceList[1].State = domain.DeviceStateDisconnected
+	p := newPump(t, New(f))
+
+	p.send(keyPress('2'))
+	p.send(keyPress('a'))
+
+	if len(f.ActivateCalls) != 0 {
+		t.Errorf("without a wired profile nothing should activate, calls: %#v", f.ActivateCalls)
+	}
+	if view := p.view(); !strings.Contains(view, "no wired profile") {
+		t.Errorf("the status line should explain there is nothing to activate, got:\n%s", view)
 	}
 }
 
@@ -49,19 +85,14 @@ func seedWiredConnected() *fake.Fake {
 	return f
 }
 
-func TestDevices_EnterOnConnectedEthernetOffersDeactivate(t *testing.T) {
+func TestEthernet_DOnConnectedDeviceConfirmsBeforeDeactivating(t *testing.T) {
 	f := seedWiredConnected()
 	p := newPump(t, New(f))
 
 	p.send(keyPress('2'))
-	p.send(keyPress('j'))
-	if got := p.app().devices.Selected().Name; got != "enp0s31f6" {
-		t.Fatalf("precondition: cursor should be on enp0s31f6, got %q", got)
-	}
-
-	p.send(tea.KeyPressMsg{Code: tea.KeyEnter})
+	p.send(keyPress('d'))
 	if view := p.view(); !strings.Contains(view, "Deactivate Wired 1?") {
-		t.Fatalf("Enter on a connected device should open a deactivate confirm, got:\n%s", view)
+		t.Fatalf("d on a connected device should open a deactivate confirm, got:\n%s", view)
 	}
 	if slices.Contains(f.Calls, "Deactivate(wired-1-active)") {
 		t.Fatal("nothing should be deactivated before the user confirms")

@@ -35,6 +35,15 @@ func loadRadioState(r backend.Reader) tea.Cmd {
 	}
 }
 
+// loadTabs reads the device set the tab bar derives from; it re-runs on
+// every backend event so device churn re-derives the tabs.
+func loadTabs(r backend.Reader) tea.Cmd {
+	return func() tea.Msg {
+		devices, err := r.Devices()
+		return tabsMsg{devices: devices, err: err}
+	}
+}
+
 // loadPermissions queries polkit permissions once; the result is cached on
 // the root model for the whole session.
 func loadPermissions(r backend.Reader) tea.Cmd {

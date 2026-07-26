@@ -1,11 +1,12 @@
-// Package wifi is the Wi-Fi tab: the live, filterable scan list that is
-// the app's home screen.
+// Package wifi is a wifi device's tab and the app's home screen: the live,
+// filterable scan list plus wifi profile management (edit and forget).
 package wifi
 
 import (
 	"fmt"
 	"strings"
 
+	"charm.land/bubbles/v2/help"
 	"charm.land/bubbles/v2/key"
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
@@ -15,6 +16,7 @@ import (
 	"github.com/ilmars/netfu/internal/tui/components/confirm"
 	"github.com/ilmars/netfu/internal/tui/components/passwordprompt"
 	"github.com/ilmars/netfu/internal/tui/keys"
+	"github.com/ilmars/netfu/internal/tui/screens/editor"
 	"github.com/ilmars/netfu/internal/tui/style"
 )
 
@@ -73,6 +75,9 @@ type Model struct {
 	connecting   string
 	prompt       *passwordprompt.Model
 	confirm      *confirm.Model
+	// editor is the pushed profile editor for a saved network; the wifi tab
+	// owns wifi profile management.
+	editor *editor.Model
 	// pendingJoin is the request the open prompt completes; lastJoin is the
 	// most recent one issued, kept so an auth failure can be tied back to it.
 	pendingJoin domain.JoinRequest
@@ -183,7 +188,12 @@ func (m Model) activeWifi(wifiDevice string, saved []savedProfile) (ssid, connID
 	return "", "", nil
 }
 
-func (m Model) Keys() keys.Wifi {
+// Keys returns the keymap for the help footer: the editor's while it is
+// pushed, the scan list's otherwise.
+func (m Model) Keys() help.KeyMap {
+	if m.editor != nil {
+		return keys.DefaultEditor()
+	}
 	return m.keys
 }
 
@@ -198,6 +208,13 @@ func (m Model) Selected() domain.AccessPoint {
 
 func (m Model) Update(msg tea.Msg) (Model, tea.Cmd) {
 	switch msg := msg.(type) {
+	case editor.SavedMsg:
+		m.editor = nil
+		m.notice = msg.Status
+		return m, m.load
+	case editor.ClosedMsg:
+		m.editor = nil
+		return m, nil
 	case tea.WindowSizeMsg:
 		m.width = msg.Width
 		m.height = msg.Height
@@ -255,7 +272,18 @@ func (m Model) Update(msg tea.Msg) (Model, tea.Cmd) {
 	case tea.KeyPressMsg:
 		return m.handleKey(msg)
 	}
-	return m, nil
+	return m.forwardToEditor(msg)
+}
+
+// forwardToEditor routes the editor's own async msgs (settings loads, save
+// results) into the pushed editor.
+func (m Model) forwardToEditor(msg tea.Msg) (Model, tea.Cmd) {
+	if m.editor == nil {
+		return m, nil
+	}
+	ed, cmd := m.editor.Update(msg)
+	m.editor = &ed
+	return m, cmd
 }
 
 // keepCursorOn re-finds the previously selected network after a reload, so
@@ -274,10 +302,10 @@ func (m *Model) keepCursorOn(selected domain.AccessPoint) {
 	}
 }
 
-// CapturesInput tells the root model to route every key here (filter or
-// modal typing).
+// CapturesInput tells the root model to route every key here (filter,
+// modal typing, or the pushed editor).
 func (m Model) CapturesInput() bool {
-	return m.filtering || m.prompt != nil || m.confirm != nil
+	return m.filtering || m.prompt != nil || m.confirm != nil || m.editor != nil
 }
 
 // Overlay is the open modal's view, layered by the root model over the
@@ -293,6 +321,9 @@ func (m Model) Overlay() string {
 }
 
 func (m Model) handleKey(msg tea.KeyPressMsg) (Model, tea.Cmd) {
+	if m.editor != nil {
+		return m.forwardToEditor(msg)
+	}
 	if m.prompt != nil {
 		return m.handlePromptKey(msg)
 	}
@@ -342,7 +373,45 @@ func (m Model) handleKey(msg tea.KeyPressMsg) (Model, tea.Cmd) {
 		return m.openSSIDEntry(domain.JoinRequest{Hidden: true, Security: domain.SecurityWPA2}), nil
 	case key.Matches(msg, m.keys.Deactivate):
 		return m.offerDeactivate()
+	case key.Matches(msg, m.keys.Edit):
+		return m.openEditor()
+	case key.Matches(msg, m.keys.Forget):
+		return m.offerForget()
 	}
+	return m, nil
+}
+
+// openEditor pushes the saved profile's editor; unsaved networks have no
+// profile to edit.
+func (m Model) openEditor() (Model, tea.Cmd) {
+	profile, ok := m.savedProfileFor(m.Selected().SSID)
+	if !ok {
+		return m, nil
+	}
+	ed := editor.New(m.backend, domain.Connection{ID: profile.ConnectionID, Name: profile.SSID, Type: "802-11-wireless"})
+	m.editor = &ed
+	return m, ed.Init()
+}
+
+// offerForget opens the confirm modal for the saved profile; x is never
+// destructive without it.
+func (m Model) offerForget() (Model, tea.Cmd) {
+	ssid := m.Selected().SSID
+	profile, ok := m.savedProfileFor(ssid)
+	if !ok {
+		return m, nil
+	}
+	backend, load := m.backend, m.load
+	modal := confirm.New(
+		fmt.Sprintf("Forget %s?", ssid),
+		func() tea.Msg {
+			if err := backend.DeleteConnection(profile.ConnectionID); err != nil {
+				return connectResultMsg{ssid: ssid, err: err}
+			}
+			return load()
+		},
+	)
+	m.confirm = &modal
 	return m, nil
 }
 
@@ -505,6 +574,9 @@ func (m Model) Scanning() bool {
 
 // Status is the screen's line for the app's status bar.
 func (m Model) Status() string {
+	if m.editor != nil {
+		return m.editor.Status()
+	}
 	if m.failed != nil {
 		return fmt.Sprintf("✗ Wrong password for %s — ↵ to retry", m.failed.SSID)
 	}
@@ -624,6 +696,9 @@ func (m Model) list() domain.WifiList {
 func (m Model) View() string {
 	if m.err != nil {
 		return style.NMNotRunningNotice + "\n"
+	}
+	if m.editor != nil {
+		return m.editor.View()
 	}
 	if m.radioOff {
 		return lipgloss.NewStyle().Foreground(m.theme.Attention).

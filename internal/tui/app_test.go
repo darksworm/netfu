@@ -24,19 +24,31 @@ func TestApp_RendersInTheAlternateScreenBuffer(t *testing.T) {
 	}
 }
 
-func TestApp_StartsOnWifiTabAndQQuits(t *testing.T) {
+func TestApp_TabBarListsPhysicalDevicesThenVirtualOtherSystem(t *testing.T) {
 	f := fake.SeedArchLaptop()
 	p := newPump(t, New(f))
 
 	view := p.view()
-	if !strings.Contains(view, "[1] Wi-Fi") || !strings.Contains(view, "[2] Devices") {
-		t.Errorf("landing view should show the tab bar, got:\n%s", view)
+	for _, entry := range []string{"[1] wlan0", "[2] enp0s31f6", "[3] Virtual", "[4] Other", "[5] System"} {
+		if !strings.Contains(view, entry) {
+			t.Errorf("the tab bar should show %q, got:\n%s", entry, view)
+		}
 	}
-	if p.app().tab != tabWifi {
-		t.Errorf("the app should land on the Wi-Fi tab, got tab %d", p.app().tab)
+}
+
+func TestApp_LandsOnTheFirstWifiDeviceTabAndQQuits(t *testing.T) {
+	f := fake.SeedArchLaptop()
+	p := newPump(t, New(f))
+
+	view := p.view()
+	if got := p.app().currentTab(); got.kind != tabKindWifi || got.device != "wlan0" {
+		t.Errorf("the app should land on the wlan0 tab, got %+v", got)
 	}
-	if strings.Contains(view, "enp0s31f6") {
-		t.Errorf("the Wi-Fi tab should not render the device list, got:\n%s", view)
+	if !strings.Contains(view, "Our House 1") {
+		t.Errorf("the landing tab should show the wifi scan list, got:\n%s", view)
+	}
+	if strings.Contains(view, "docker0") {
+		t.Errorf("the wifi device tab should not render other devices, got:\n%s", view)
 	}
 
 	p.send(keyPress('q'))
@@ -45,13 +57,13 @@ func TestApp_StartsOnWifiTabAndQQuits(t *testing.T) {
 	}
 }
 
-func TestApp_DevicesTabShowsDeviceListAndQQuits(t *testing.T) {
+func TestApp_VirtualTabShowsVirtualDeviceListAndQQuits(t *testing.T) {
 	f := fake.SeedArchLaptop()
 	p := newPump(t, New(f))
 
-	p.send(keyPress('2'))
-	if view := p.view(); !strings.Contains(view, "enp0s31f6") {
-		t.Errorf("the Devices tab should show the device list, got:\n%s", view)
+	p.send(keyPress('3'))
+	if view := p.view(); !strings.Contains(view, "docker0") {
+		t.Errorf("the Virtual tab should show the virtual device list, got:\n%s", view)
 	}
 
 	p.send(keyPress('q'))
@@ -64,44 +76,129 @@ func TestApp_NumberKeysAndBracketsSwitchTabs(t *testing.T) {
 	f := fake.SeedArchLaptop()
 	p := newPump(t, New(f))
 
-	p.send(keyPress('3'))
-	if p.app().tab != tabConnections {
-		t.Errorf("3 should open the Connections tab, got tab %d", p.app().tab)
+	p.send(keyPress('4'))
+	if got := p.app().currentTab(); got.kind != tabKindOther {
+		t.Errorf("4 should open the Other tab, got %+v", got)
 	}
-	if view := p.view(); !strings.Contains(view, "Our House 1") {
-		t.Errorf("Connections tab should list the saved profiles, got:\n%s", view)
-	}
-
-	p.send(keyPress(']'))
-	if p.app().tab != tabSystem {
-		t.Errorf("] should move to the next tab, got tab %d", p.app().tab)
+	if view := p.view(); !strings.Contains(view, "LAST USED") {
+		t.Errorf("the Other tab should list saved profiles, got:\n%s", view)
 	}
 
 	p.send(keyPress(']'))
-	if p.app().tab != tabWifi {
-		t.Errorf("] on the last tab should wrap to Wi-Fi, got tab %d", p.app().tab)
+	if got := p.app().currentTab(); got.kind != tabKindSystem {
+		t.Errorf("] should move to the next tab, got %+v", got)
+	}
+
+	p.send(keyPress(']'))
+	if got := p.app().currentTab(); got.kind != tabKindWifi || got.device != "wlan0" {
+		t.Errorf("] on the last tab should wrap to the first device tab, got %+v", got)
 	}
 
 	p.send(keyPress('['))
-	if p.app().tab != tabSystem {
-		t.Errorf("[ on the first tab should wrap to System, got tab %d", p.app().tab)
+	if got := p.app().currentTab(); got.kind != tabKindSystem {
+		t.Errorf("[ on the first tab should wrap to System, got %+v", got)
+	}
+
+	p.send(keyPress('9'))
+	if got := p.app().currentTab(); got.kind != tabKindSystem {
+		t.Errorf("a number past the last tab should be ignored, got %+v", got)
+	}
+}
+
+func TestApp_VirtualTabHidesPhysicalDevicesAndP2PNoise(t *testing.T) {
+	f := fake.SeedArchLaptop()
+	f.DeviceList = append(f.DeviceList, domain.Device{
+		Name: "p2p-dev-wlan0", Type: domain.DeviceTypeUnknown, State: domain.DeviceStateDisconnected, Managed: true,
+	})
+	p := newPump(t, New(f))
+
+	p.send(keyPress('3'))
+	view := p.view()
+	if !strings.Contains(view, "docker0") {
+		t.Errorf("the Virtual tab should list the bridge, got:\n%s", view)
+	}
+	// The physical names appear exactly once — in the tab bar, not as rows.
+	for _, hidden := range []string{"wlan0", "enp0s31f6"} {
+		if got := strings.Count(view, hidden); got != 1 {
+			t.Errorf("%s has its own tab and should not appear as a Virtual row (%d occurrences), got:\n%s",
+				hidden, got, view)
+		}
+	}
+	if strings.Contains(view, "p2p-dev-wlan0") {
+		t.Errorf("p2p-dev pseudo-devices are wifi-p2p noise and should be hidden, got:\n%s", view)
+	}
+}
+
+func TestApp_DeviceChurnRedrivesTabsKeepingPhysicalOrderStable(t *testing.T) {
+	f := fake.SeedArchLaptop()
+	p := newPump(t, New(f))
+	p.send(keyPress('5'))
+	if got := p.app().currentTab(); got.kind != tabKindSystem {
+		t.Fatalf("precondition: tab 5 should be System, got %+v", got)
+	}
+
+	// A USB NIC appears: it gets its own tab after the built-in one, and
+	// System shifts to slot 6 with the user still on it.
+	f.DeviceList = append(f.DeviceList, domain.Device{
+		Name: "enp5s0u1", Type: domain.DeviceTypeEthernet, State: domain.DeviceStateDisconnected, Managed: true,
+	})
+	f.Push(domain.Event{Kind: domain.EventDeviceChanged, DeviceName: "enp5s0u1"})
+	p.deliverNext()
+
+	view := p.view()
+	for _, entry := range []string{"[1] wlan0", "[2] enp0s31f6", "[3] enp5s0u1", "[4] Virtual", "[5] Other", "[6] System"} {
+		if !strings.Contains(view, entry) {
+			t.Errorf("after hotplug the tab bar should show %q, got:\n%s", entry, view)
+		}
+	}
+	if got := p.app().currentTab(); got.kind != tabKindSystem {
+		t.Errorf("churn elsewhere must not move the current tab off System, got %+v", got)
+	}
+}
+
+func TestApp_CurrentTabsDeviceVanishingFallsBackToTheFirstTab(t *testing.T) {
+	f := fake.SeedArchLaptop()
+	f.DeviceList = append(f.DeviceList, domain.Device{
+		Name: "enp5s0u1", Type: domain.DeviceTypeEthernet, State: domain.DeviceStateDisconnected, Managed: true,
+	})
+	p := newPump(t, New(f))
+
+	p.send(keyPress('3'))
+	if got := p.app().currentTab(); got.device != "enp5s0u1" {
+		t.Fatalf("precondition: tab 3 should be the USB NIC, got %+v", got)
+	}
+
+	// The USB NIC is unplugged while its tab is open.
+	f.DeviceList = f.DeviceList[:len(f.DeviceList)-1]
+	f.Push(domain.Event{Kind: domain.EventDeviceChanged, DeviceName: "enp5s0u1"})
+	p.deliverNext()
+
+	if got := p.app().currentTab(); got.kind != tabKindWifi || got.device != "wlan0" {
+		t.Errorf("a vanished device tab should fall back to the first tab, got %+v", got)
+	}
+	if view := p.view(); strings.Contains(view, "enp5s0u1") {
+		t.Errorf("the unplugged NIC should leave the tab bar, got:\n%s", view)
 	}
 }
 
 func TestApp_TabStatePersistsAcrossSwitches(t *testing.T) {
 	f := fake.SeedArchLaptop()
+	f.DeviceList = append(f.DeviceList, domain.Device{
+		Name: "br-9f1c2d", Type: domain.DeviceTypeBridge, State: domain.DeviceStateConnected, Managed: true,
+	})
 	p := newPump(t, New(f))
 
-	p.send(keyPress('2'))
-	p.send(keyPress('j'))
-	if got := p.app().devices.Selected().Name; got != "enp0s31f6" {
-		t.Fatalf("precondition: cursor should be on enp0s31f6, got %q", got)
+	p.send(keyPress('3'))
+	p.send(keyPress('G'))
+	moved := p.app().devices.Selected().Name
+	if moved == "" {
+		t.Fatal("precondition: the Virtual tab should have a row to move to")
 	}
 
 	p.send(keyPress('1'))
-	p.send(keyPress('2'))
-	if got := p.app().devices.Selected().Name; got != "enp0s31f6" {
-		t.Errorf("returning to the Devices tab should keep its cursor, got %q", got)
+	p.send(keyPress('3'))
+	if got := p.app().devices.Selected().Name; got != moved {
+		t.Errorf("returning to the Virtual tab should keep its cursor on %q, got %q", moved, got)
 	}
 }
 
@@ -153,13 +250,13 @@ func TestApp_HelpOverlayListsTheActiveScreensKeymap(t *testing.T) {
 		}
 	}
 
-	p.send(keyPress('2'))
+	p.send(keyPress('3'))
 	view = p.view()
 	if !strings.Contains(view, "activate") || !strings.Contains(view, "deactivate") {
-		t.Errorf("on the devices tab the help overlay should list the devices actions, got:\n%s", view)
+		t.Errorf("on the Virtual tab the help overlay should list the device actions, got:\n%s", view)
 	}
 	if strings.Contains(view, "join hidden") {
-		t.Errorf("the devices tab help should not show wifi bindings, got:\n%s", view)
+		t.Errorf("the Virtual tab help should not show wifi bindings, got:\n%s", view)
 	}
 }
 
@@ -168,14 +265,15 @@ func TestApp_DevicesConfirmModalOverlaysTheListInsteadOfPushingIt(t *testing.T) 
 	p := newPump(t, New(f))
 	p.send(tea.WindowSizeMsg{Width: 80, Height: 24})
 
-	p.send(keyPress('2'))
+	p.send(keyPress('3'))
+	p.send(keyPress('G'))
 	linesBefore := strings.Count(p.view(), "\n")
 
-	// Enter on the connected wlan0 row asks to deactivate.
+	// Enter on the connected docker0 row asks to deactivate.
 	p.send(tea.KeyPressMsg{Code: tea.KeyEnter})
 
 	view := p.view()
-	if !strings.Contains(view, "Deactivate Our House 1?") {
+	if !strings.Contains(view, "Deactivate docker0?") {
 		t.Fatalf("the confirm modal should be visible, got:\n%s", view)
 	}
 	if linesAfter := strings.Count(view, "\n"); linesAfter != linesBefore {
@@ -264,22 +362,22 @@ func TestDevices_DeviceStateEventUpdatesRowLive(t *testing.T) {
 	f := fake.SeedArchLaptop()
 	p := newPump(t, New(f))
 
-	p.send(keyPress('2'))
-	p.send(keyPress('j'))
-	if got := p.app().devices.Selected().Name; got != "enp0s31f6" {
-		t.Fatalf("precondition: cursor should be on enp0s31f6, got %q", got)
+	p.send(keyPress('3'))
+	p.send(keyPress('G'))
+	if got := p.app().devices.Selected().Name; got != "docker0" {
+		t.Fatalf("precondition: cursor should be on docker0, got %q", got)
 	}
 
-	// Cable plugged in: backend state changes and an event fires.
-	f.DeviceList[1].State = domain.DeviceStateConnected
-	f.Push(domain.Event{Kind: domain.EventDeviceChanged, DeviceName: "enp0s31f6"})
+	// The bridge loses its carrier: backend state changes and an event fires.
+	f.DeviceList[2].State = domain.DeviceStateDisconnected
+	f.Push(domain.Event{Kind: domain.EventDeviceChanged, DeviceName: "docker0"})
 	p.deliverNext()
 
-	if row := lineContaining(t, p.view(), "enp0s31f6"); !strings.Contains(row, "connected") {
+	if row := lineContaining(t, p.view(), "docker0"); !strings.Contains(row, "disconnected") {
 		t.Errorf("row should show the new device state, got: %s", row)
 	}
-	if got := p.app().devices.Selected().Name; got != "enp0s31f6" {
-		t.Errorf("live update should keep the cursor on enp0s31f6, got %q", got)
+	if got := p.app().devices.Selected().Name; got != "docker0" {
+		t.Errorf("live update should keep the cursor on docker0, got %q", got)
 	}
 }
 
@@ -472,9 +570,10 @@ func TestApp_QPopsDeviceDetailLayerAndOnlyQuitsFromTopLevel(t *testing.T) {
 	f := fake.SeedArchLaptop()
 	p := newPump(t, New(f))
 
-	p.send(keyPress('2'))
+	p.send(keyPress('3'))
+	p.send(keyPress('G'))
 	p.send(keyPress('i'))
-	if view := p.view(); !strings.Contains(view, "Device wlan0") {
+	if view := p.view(); !strings.Contains(view, "Device docker0") {
 		t.Fatalf("precondition: i should push the device detail, got:\n%s", view)
 	}
 
@@ -482,7 +581,7 @@ func TestApp_QPopsDeviceDetailLayerAndOnlyQuitsFromTopLevel(t *testing.T) {
 	if containsQuit(p.msgs) {
 		t.Fatal("q on a pushed layer should pop it, not quit the app")
 	}
-	if view := p.view(); strings.Contains(view, "Device wlan0") {
+	if view := p.view(); strings.Contains(view, "Device docker0") {
 		t.Errorf("q should have popped the detail back to the list, got:\n%s", view)
 	}
 
@@ -496,9 +595,9 @@ func TestApp_QPopsConnectionEditorLayerInsteadOfQuitting(t *testing.T) {
 	f := fake.SeedArchLaptop()
 	p := newPump(t, New(f))
 
-	p.send(keyPress('3'))
+	p.send(keyPress('4'))
 	p.send(keyPress('e'))
-	if view := p.view(); !strings.Contains(view, "Our House 1") || !strings.Contains(view, "Autoconnect") {
+	if view := p.view(); !strings.Contains(view, "Autoconnect") {
 		t.Fatalf("precondition: e should push the editor, got:\n%s", view)
 	}
 
@@ -520,12 +619,12 @@ func TestApp_BelowMinimumSizeShowsTooSmallScreenAndRecoversOnResize(t *testing.T
 	if !strings.Contains(view, "Terminal too small (59x16, need 60x16)") {
 		t.Errorf("a too-narrow terminal should show the too-small screen, got:\n%s", view)
 	}
-	if strings.Contains(view, "[1] Wi-Fi") {
+	if strings.Contains(view, "[1] wlan0") {
 		t.Errorf("the too-small screen should replace the whole pane, got:\n%s", view)
 	}
 
 	p.send(tea.WindowSizeMsg{Width: 80, Height: 24})
-	if view := p.view(); !strings.Contains(view, "[1] Wi-Fi") {
+	if view := p.view(); !strings.Contains(view, "[1] wlan0") {
 		t.Errorf("growing the terminal should restore the app, got:\n%s", view)
 	}
 }
@@ -539,16 +638,19 @@ func TestApp_BackendConnectionErrorShowsNMNotRunningOnEveryTabUntilALoadSucceeds
 	p := newPump(t, New(f))
 
 	const notice = "NetworkManager is not running — systemctl start NetworkManager"
-	for _, tab := range []rune{'1', '2', '3', '4'} {
+	for _, tab := range []rune{'1', '2', '3'} {
 		p.send(keyPress(tab))
 		if view := p.view(); !strings.Contains(view, notice) {
 			t.Errorf("tab %c should show the NM-not-running notice, got:\n%s", tab, view)
 		}
 	}
 
-	// NM comes back: the next successful reload clears the notice.
+	// NM comes back: the device event re-derives the tabs and the next
+	// successful reload clears the notice.
 	f.Errs = map[string]error{}
-	for _, tab := range []rune{'1', '2', '3', '4'} {
+	f.Push(domain.Event{Kind: domain.EventDeviceChanged, DeviceName: "wlan0"})
+	p.deliverNext()
+	for _, tab := range []rune{'1', '2', '3', '4', '5'} {
 		p.send(keyPress(tab))
 		if view := p.view(); strings.Contains(view, notice) {
 			t.Errorf("tab %c should recover after a successful reload, got:\n%s", tab, view)
@@ -575,11 +677,12 @@ func TestApp_ModalDimsTheBackdropBehindIt(t *testing.T) {
 	p := newPump(t, New(f))
 	p.send(tea.WindowSizeMsg{Width: 80, Height: 24})
 
-	p.send(keyPress('2'))
+	p.send(keyPress('3'))
+	p.send(keyPress('G'))
 	p.send(tea.KeyPressMsg{Code: tea.KeyEnter}) // confirm modal over the list
 
 	view := p.view()
-	if !strings.Contains(view, "Deactivate Our House 1?") {
+	if !strings.Contains(view, "Deactivate docker0?") {
 		t.Fatalf("precondition: the confirm modal should be open, got:\n%s", view)
 	}
 	if !strings.Contains(view, "\x1b[2m") {

@@ -1,6 +1,5 @@
-// Package system is the System tab: hostname, radio toggles, NM state, and
-// the active-connections section where existing VPN profiles are activated
-// (D-Bus cannot create VPN connections, so activation is all netfu offers).
+// Package system is the System tab: hostname, radio toggles, and NM state.
+// Connection activation (VPN included) lives on the Other tab.
 package system
 
 import (
@@ -26,8 +25,6 @@ type Model struct {
 	hostname    string
 	wifiEnabled bool
 	nmState     domain.NMState
-	active      []domain.ActiveConnection
-	vpns        []domain.Connection
 	cursor      int
 	editing     bool
 	// draft is the hostname editor's text; hand-rolled like the filter
@@ -43,8 +40,6 @@ type loadedMsg struct {
 	hostname    string
 	wifiEnabled bool
 	nmState     domain.NMState
-	active      []domain.ActiveConnection
-	vpns        []domain.Connection
 	err         error
 }
 
@@ -63,17 +58,13 @@ type rowKind int
 const (
 	rowHostname rowKind = iota
 	rowRadio
-	rowConnection
 )
 
-// row is one selectable line: a settings field, an active connection
-// (d deactivates), or an inactive saved VPN profile (a activates).
+// row is one selectable settings field.
 type row struct {
-	kind         rowKind
-	name         string
-	detail       string
-	connectionID string // set when the row can be activated
-	activeID     string // set when the row can be deactivated
+	kind   rowKind
+	name   string
+	detail string
 }
 
 func New(b backend.Backend) Model {
@@ -89,20 +80,6 @@ func (m Model) load() tea.Msg {
 	if err != nil {
 		return loadedMsg{err: err}
 	}
-	active, err := m.backend.ActiveConnections()
-	if err != nil {
-		return loadedMsg{err: err}
-	}
-	connections, err := m.backend.Connections()
-	if err != nil {
-		return loadedMsg{err: err}
-	}
-	var vpns []domain.Connection
-	for _, c := range connections {
-		if c.Type == "vpn" {
-			vpns = append(vpns, c)
-		}
-	}
 	wifiEnabled, err := m.backend.WifiEnabled()
 	if err != nil {
 		return loadedMsg{err: err}
@@ -111,7 +88,7 @@ func (m Model) load() tea.Msg {
 	if err != nil {
 		return loadedMsg{err: err}
 	}
-	return loadedMsg{hostname: hostname, wifiEnabled: wifiEnabled, nmState: nmState, active: active, vpns: vpns}
+	return loadedMsg{hostname: hostname, wifiEnabled: wifiEnabled, nmState: nmState}
 }
 
 func (m Model) Keys() keys.System {
@@ -138,34 +115,10 @@ func (m Model) CapturesInput() bool {
 }
 
 func (m Model) rows() []row {
-	rows := []row{
+	return []row{
 		{kind: rowHostname, name: "Hostname", detail: m.hostname},
 		{kind: rowRadio, name: "Wi-Fi radio", detail: onOff(m.wifiEnabled)},
 	}
-	for _, ac := range m.active {
-		rows = append(rows, row{
-			kind:     rowConnection,
-			name:     ac.Name,
-			detail:   fmt.Sprintf("%s  %s", ac.DeviceName, ac.State),
-			activeID: ac.ID,
-		})
-	}
-	for _, vpn := range m.vpns {
-		if m.isActive(vpn.ID) {
-			continue
-		}
-		rows = append(rows, row{kind: rowConnection, name: vpn.Name, detail: "vpn  inactive", connectionID: vpn.ID})
-	}
-	return rows
-}
-
-func (m Model) isActive(connectionID string) bool {
-	for _, ac := range m.active {
-		if ac.ID == connectionID {
-			return true
-		}
-	}
-	return false
 }
 
 func (m Model) selected() row {
@@ -184,8 +137,6 @@ func (m Model) Update(msg tea.Msg) (Model, tea.Cmd) {
 			m.wifiEnabled = msg.wifiEnabled
 			m.nmState = msg.nmState
 		}
-		m.active = msg.active
-		m.vpns = msg.vpns
 		m.err = msg.err
 		if rows := m.rows(); m.cursor >= len(rows) {
 			m.cursor = max(len(rows)-1, 0)
@@ -250,14 +201,6 @@ func (m Model) handleKey(msg tea.KeyPressMsg) (Model, tea.Cmd) {
 		if m.selected().kind == rowRadio {
 			return m, setRadio(m.backend, !m.wifiEnabled)
 		}
-	case key.Matches(msg, m.keys.Activate):
-		if r := m.selected(); r.connectionID != "" {
-			return m, activate(m.backend, r)
-		}
-	case key.Matches(msg, m.keys.Deactivate):
-		if r := m.selected(); r.activeID != "" {
-			return m, deactivate(m.backend, r)
-		}
 	}
 	return m, nil
 }
@@ -308,51 +251,21 @@ func saveHostname(mut backend.Mutator, name string) tea.Cmd {
 	}
 }
 
-// activate binds to no device: VPN profiles pick their own base connection.
-func activate(mut backend.Mutator, r row) tea.Cmd {
-	return func() tea.Msg {
-		if err := mut.Activate(r.connectionID, ""); err != nil {
-			return StatusMsg(fmt.Sprintf("✗ activate %s: %v", r.name, err))
-		}
-		return StatusMsg(fmt.Sprintf("Activating %s…", r.name))
-	}
-}
-
-func deactivate(mut backend.Mutator, r row) tea.Cmd {
-	return func() tea.Msg {
-		if err := mut.Deactivate(r.activeID); err != nil {
-			return StatusMsg(fmt.Sprintf("✗ deactivate %s: %v", r.name, err))
-		}
-		return StatusMsg(fmt.Sprintf("Deactivating %s…", r.name))
-	}
-}
-
 func (m Model) View() string {
 	if m.err != nil {
 		return style.NMNotRunningNotice + "\n"
 	}
 	var lines []string
 	lines = append(lines, style.Title.Render("System"))
-	printedConnectionsHeader := false
 	for i, r := range m.rows() {
-		if r.kind == rowConnection && !printedConnectionsHeader {
-			lines = append(lines, m.nmStateLine())
-			lines = append(lines, style.Title.Render("Active connections"))
-			printedConnectionsHeader = true
-		}
 		lines = append(lines, m.renderRow(r, i == m.cursor))
 	}
-	if !printedConnectionsHeader {
-		lines = append(lines, m.nmStateLine())
-	}
+	lines = append(lines, m.nmStateLine())
 	return style.Fit(lines, m.width, m.height)
 }
 
 // nmStateLine is informational, not a selectable row.
 func (m Model) nmStateLine() string {
-	if m.err != nil {
-		return fmt.Sprintf("  %-24s unreachable — systemctl start NetworkManager", "NetworkManager:")
-	}
 	return fmt.Sprintf("  %-24s %s", "NetworkManager:", m.nmState)
 }
 
@@ -360,11 +273,7 @@ func (m Model) renderRow(r row, selected bool) string {
 	if r.kind == rowHostname && m.editing {
 		return "▸ " + fmt.Sprintf("%-24s %s▏", r.name+":", m.draft)
 	}
-	label := r.name
-	if r.kind != rowConnection {
-		label += ":"
-	}
-	line := fmt.Sprintf("%-24s %s", label, r.detail)
+	line := fmt.Sprintf("%-24s %s", r.name+":", r.detail)
 	if r.kind == rowHostname && !m.hostnameAllowed() {
 		line = style.Faint.Render(line + " 🔒")
 	} else if selected {

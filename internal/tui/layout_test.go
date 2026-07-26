@@ -66,12 +66,22 @@ func TestLayout_WifiTabIdleWithCursorOnSecondRow(t *testing.T) {
 	requireGolden(t, "wifi_idle_cursor_second_row_80x24", p.view())
 }
 
-func TestLayout_DevicesTab(t *testing.T) {
+func TestLayout_EthernetTab(t *testing.T) {
 	f := fake.SeedArchLaptop()
 	p := newPump(t, New(f))
 
 	p.send(tea.WindowSizeMsg{Width: 80, Height: 24})
 	p.send(keyPress('2'))
 
-	requireGolden(t, "devices_80x24", p.view())
+	requireGolden(t, "ethernet_80x24", p.view())
+}
+
+func TestLayout_VirtualTab(t *testing.T) {
+	f := fake.SeedArchLaptop()
+	p := newPump(t, New(f))
+
+	p.send(tea.WindowSizeMsg{Width: 80, Height: 24})
+	p.send(keyPress('3'))
+
+	requireGolden(t, "virtual_80x24", p.view())
 }

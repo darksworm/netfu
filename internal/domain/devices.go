@@ -1,7 +1,8 @@
 package domain
 
-// DeviceGroups is the devices tab's row model: physical NICs first,
-// virtual devices (bridge, veth, tun, bond, ...) grouped after.
+// DeviceGroups splits the device set the way the tabs do: physical NICs
+// (which get their own tabs) and virtual devices (bridge, veth, tun,
+// bond, ... — the Virtual tab's rows).
 type DeviceGroups struct {
 	Physical []Device
 	Virtual  []Device

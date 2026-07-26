@@ -14,17 +14,27 @@ import (
 	"github.com/ilmars/netfu/internal/domain"
 )
 
-func TestDevices_ListShowsManagedDevicesWithStateAndActiveConnection(t *testing.T) {
+// seedVirtualZoo returns a fake with several managed virtual devices, the
+// row model this screen (the Virtual tab) navigates.
+func seedVirtualZoo() *fake.Fake {
 	f := fake.SeedArchLaptop()
+	f.DeviceList = append(f.DeviceList,
+		domain.Device{Name: "br-9f1c2d", Type: domain.DeviceTypeBridge, State: domain.DeviceStateConnected, Managed: true, ActiveConnection: "br-9f1c2d"},
+		domain.Device{Name: "lo", Type: domain.DeviceTypeLoopback, State: domain.DeviceStateConnected, Managed: true, ActiveConnection: "lo"},
+	)
+	return f
+}
+
+func TestDevices_ListShowsManagedVirtualDevicesOnly(t *testing.T) {
+	f := seedVirtualZoo()
+	f.DeviceList = append(f.DeviceList, domain.Device{
+		Name: "p2p-dev-wlan0", Type: domain.DeviceTypeUnknown, State: domain.DeviceStateDisconnected, Managed: true,
+	})
 	m := New(f)
 	m = loadDevices(t, m)
 
 	view := m.View()
-	for _, want := range []string{
-		"wlan0", "wifi", "connected", "Our House 1",
-		"enp0s31f6", "ethernet", "unavailable",
-		"docker0", "bridge",
-	} {
+	for _, want := range []string{"docker0", "bridge", "connected", "br-9f1c2d", "lo", "loopback"} {
 		if !strings.Contains(view, want) {
 			t.Errorf("device list should contain %q, got:\n%s", want, view)
 		}
@@ -32,10 +42,18 @@ func TestDevices_ListShowsManagedDevicesWithStateAndActiveConnection(t *testing.
 	if strings.Contains(view, "veth1a2b3c") {
 		t.Errorf("unmanaged devices should be hidden, got:\n%s", view)
 	}
+	for _, physical := range []string{"wlan0", "enp0s31f6"} {
+		if strings.Contains(view, physical) {
+			t.Errorf("physical devices have their own tabs and should be hidden, got:\n%s", view)
+		}
+	}
+	if strings.Contains(view, "p2p-dev-wlan0") {
+		t.Errorf("p2p-dev pseudo-devices are wifi-p2p noise and should be hidden, got:\n%s", view)
+	}
 }
 
 func TestDevices_ListHasColumnHeaderWithAlignedColumns(t *testing.T) {
-	f := fake.SeedArchLaptop()
+	f := seedVirtualZoo()
 	m := New(f)
 	m = loadDevices(t, m)
 
@@ -56,19 +74,19 @@ func TestDevices_ListHasColumnHeaderWithAlignedColumns(t *testing.T) {
 		t.Fatalf("no row for %s in:\n%s", name, m.View())
 		return ""
 	}
-	enp, docker := row("enp0s31f6"), row("docker0")
-	if got, want := strings.Index(enp, "ethernet"), strings.Index(header, "TYPE"); got != want {
-		t.Errorf("the type column should align with its header (col %d vs %d):\n%s\n%s", got, want, header, enp)
+	bridge, loopback := row("br-9f1c2d"), row("lo ")
+	if got, want := strings.Index(loopback, "loopback"), strings.Index(header, "TYPE"); got != want {
+		t.Errorf("the type column should align with its header (col %d vs %d):\n%s\n%s", got, want, header, loopback)
 	}
-	if got, want := strings.LastIndex(docker, "docker0"), strings.Index(header, "CONNECTION"); got != want {
-		t.Errorf("the connection column should align with its header (col %d vs %d):\n%s\n%s", got, want, header, docker)
+	if got, want := strings.LastIndex(bridge, "br-9f1c2d"), strings.Index(header, "CONNECTION"); got != want {
+		t.Errorf("the connection column should align with its header (col %d vs %d):\n%s\n%s", got, want, header, bridge)
 	}
 }
 
 func TestDevices_LongDeviceNamesAreTrimmedToKeepColumnsAligned(t *testing.T) {
 	f := fake.New()
 	f.DeviceList = []domain.Device{
-		{Name: "wlan0", Type: domain.DeviceTypeWifi, State: domain.DeviceStateConnected, Managed: true},
+		{Name: "docker0", Type: domain.DeviceTypeBridge, State: domain.DeviceStateConnected, Managed: true},
 		{Name: "br-1408b82239ca-with-a-very-long-tail", Type: domain.DeviceTypeBridge, State: domain.DeviceStateConnected, Managed: true},
 	}
 	m := New(f)
@@ -82,10 +100,8 @@ func TestDevices_LongDeviceNamesAreTrimmedToKeepColumnsAligned(t *testing.T) {
 	}
 	sawTruncated := false
 	for _, line := range lines[1:] {
-		for _, typ := range []string{"wifi", "bridge"} {
-			if got := displayColumn(line, typ); got >= 0 && got != typeCol {
-				t.Errorf("every row's type must align with the header (col %d vs %d):\n%s\n%s", got, typeCol, header, line)
-			}
+		if got := displayColumn(line, "bridge"); got >= 0 && got != typeCol {
+			t.Errorf("every row's type must align with the header (col %d vs %d):\n%s\n%s", got, typeCol, header, line)
 		}
 		if strings.Contains(line, "…") {
 			sawTruncated = true
@@ -97,7 +113,7 @@ func TestDevices_LongDeviceNamesAreTrimmedToKeepColumnsAligned(t *testing.T) {
 }
 
 func TestDevices_JKMoveSelection_GAndShiftGJumpEnds(t *testing.T) {
-	f := fake.SeedArchLaptop()
+	f := seedVirtualZoo()
 	m := New(f)
 	m = loadDevices(t, m)
 
@@ -108,44 +124,42 @@ func TestDevices_JKMoveSelection_GAndShiftGJumpEnds(t *testing.T) {
 		}
 	}
 
-	assertSelected("load", "wlan0")
+	assertSelected("load", "docker0")
 
 	m, _ = m.Update(keyPress('j'))
-	assertSelected("j", "enp0s31f6")
+	assertSelected("j", "br-9f1c2d")
 
 	m, _ = m.Update(keyPress('k'))
-	assertSelected("k", "wlan0")
+	assertSelected("k", "docker0")
 
 	m, _ = m.Update(keyPress('k'))
-	assertSelected("k at top", "wlan0")
+	assertSelected("k at top", "docker0")
 
 	m, _ = m.Update(keyPress('G'))
-	assertSelected("G", "docker0")
+	assertSelected("G", "lo")
 
 	m, _ = m.Update(keyPress('j'))
-	assertSelected("j at bottom", "docker0")
+	assertSelected("j at bottom", "lo")
 
 	m, _ = m.Update(keyPress('g'))
-	assertSelected("g", "wlan0")
+	assertSelected("g", "docker0")
 }
 
 func TestDevices_DOffersDeactivateConfirmAndEscCancels(t *testing.T) {
 	f := fake.SeedArchLaptop()
-	f.DeviceList[1].State = domain.DeviceStateConnected
-	f.DeviceList[1].ActiveConnection = "Wired 1"
-	f.ActiveList = append(f.ActiveList,
-		domain.ActiveConnection{ID: "wired-1-active", Name: "Wired 1", DeviceName: "enp0s31f6", State: domain.DeviceStateConnected})
 	m := New(f)
 	m = loadDevices(t, m)
-	m, _ = m.Update(keyPress('j'))
+	if got := m.Selected().Name; got != "docker0" {
+		t.Fatalf("precondition: cursor should be on docker0, got %q", got)
+	}
 
 	m, _ = m.Update(keyPress('d'))
-	if overlay := m.Overlay(); !strings.Contains(overlay, "Deactivate Wired 1?") {
+	if overlay := m.Overlay(); !strings.Contains(overlay, "Deactivate docker0?") {
 		t.Fatalf("d on a connected device should open the deactivate confirm, got:\n%s", overlay)
 	}
 
 	m, _ = m.Update(tea.KeyPressMsg{Code: tea.KeyEsc})
-	if overlay := m.Overlay(); strings.Contains(overlay, "Deactivate Wired 1?") {
+	if overlay := m.Overlay(); strings.Contains(overlay, "Deactivate docker0?") {
 		t.Fatalf("esc should dismiss the confirm, got:\n%s", overlay)
 	}
 	if len(f.Calls) != 0 {
@@ -158,33 +172,35 @@ func TestDevices_DOffersDeactivateConfirmAndEscCancels(t *testing.T) {
 		t.Fatal("confirming should return the deactivate cmd")
 	}
 	cmd()
-	if !slices.Contains(f.Calls, "Deactivate(wired-1-active)") {
+	if !slices.Contains(f.Calls, "Deactivate(docker0)") {
 		t.Errorf("confirming should deactivate the active connection, calls: %v", f.Calls)
 	}
 }
 
 func TestDevices_SlashFilterNarrowsListByName(t *testing.T) {
-	f := fake.SeedArchLaptop()
+	f := seedVirtualZoo()
 	m := New(f)
 	m = loadDevices(t, m)
 	m, _ = m.Update(keyPress('G'))
-	if got := m.Selected().Name; got != "docker0" {
-		t.Fatalf("precondition: cursor should be on docker0, got %q", got)
+	if got := m.Selected().Name; got != "lo" {
+		t.Fatalf("precondition: cursor should be on lo, got %q", got)
 	}
 
 	m, _ = m.Update(keyPress('/'))
-	m, _ = m.Update(keyPress('w'))
+	for _, r := range "br" {
+		m, _ = m.Update(keyPress(r))
+	}
 
 	view := m.View()
-	if !strings.Contains(view, "wlan0") {
-		t.Errorf("filter 'w' should keep wlan0 visible, got:\n%s", view)
+	if !strings.Contains(view, "br-9f1c2d") {
+		t.Errorf("filter 'br' should keep br-9f1c2d visible, got:\n%s", view)
 	}
-	for _, hidden := range []string{"docker0", "enp0s31f6"} {
+	for _, hidden := range []string{"docker0", "lo "} {
 		if strings.Contains(view, hidden) {
-			t.Errorf("filter 'w' should hide %s, got:\n%s", hidden, view)
+			t.Errorf("filter 'br' should hide %s, got:\n%s", hidden, view)
 		}
 	}
-	if got := m.Selected().Name; got != "wlan0" {
+	if got := m.Selected().Name; got != "br-9f1c2d" {
 		t.Errorf("cursor should clamp to the visible set, selected %q", got)
 	}
 
@@ -200,39 +216,24 @@ func TestDevices_SlashFilterNarrowsListByName(t *testing.T) {
 	}
 }
 
-func TestDevices_ListShowsPhysicalDevicesBeforeVirtual(t *testing.T) {
-	f := fake.New()
-	f.DeviceList = []domain.Device{
-		{Name: "docker0", Type: domain.DeviceTypeBridge, State: domain.DeviceStateConnected, Managed: true},
-		{Name: "wlan0", Type: domain.DeviceTypeWifi, State: domain.DeviceStateConnected, Managed: true},
-	}
-	m := New(f)
-	m = loadDevices(t, m)
-
-	view := m.View()
-	if strings.Index(view, "wlan0") > strings.Index(view, "docker0") {
-		t.Errorf("physical devices should be listed before virtual ones, got:\n%s", view)
-	}
-}
-
 func TestDevices_IShowsReadOnlyDetailAndEscPops(t *testing.T) {
-	f := fake.SeedArchLaptop()
+	f := seedVirtualZoo()
 	m := New(f)
 	m = loadDevices(t, m)
 
 	m, _ = m.Update(keyPress('i'))
 	view := m.View()
 	for _, want := range []string{
-		"Name:", "wlan0",
-		"Type:", "wifi",
+		"Name:", "docker0",
+		"Type:", "bridge",
 		"State:", "connected",
-		"Active connection:", "Our House 1",
+		"Active connection:",
 	} {
 		if !strings.Contains(view, want) {
 			t.Errorf("the detail view should show %q, got:\n%s", want, view)
 		}
 	}
-	if strings.Contains(view, "enp0s31f6") {
+	if strings.Contains(view, "br-9f1c2d") {
 		t.Errorf("the detail view should replace the list, got:\n%s", view)
 	}
 	if len(f.Calls) != 0 {
@@ -240,10 +241,10 @@ func TestDevices_IShowsReadOnlyDetailAndEscPops(t *testing.T) {
 	}
 
 	m, _ = m.Update(tea.KeyPressMsg{Code: tea.KeyEsc})
-	if view := m.View(); !strings.Contains(view, "enp0s31f6") {
+	if view := m.View(); !strings.Contains(view, "br-9f1c2d") {
 		t.Errorf("esc should pop back to the device list, got:\n%s", view)
 	}
-	if got := m.Selected().Name; got != "wlan0" {
+	if got := m.Selected().Name; got != "docker0" {
 		t.Errorf("popping the detail should keep the cursor, got %q", got)
 	}
 }
