@@ -298,30 +298,13 @@ func TestWifi_ConnectingShowsInlineActivatingStateOnRow(t *testing.T) {
 	}
 }
 
-func TestWifi_SavedConnectionOutOfRangeListedInKnownSectionAsUnavailable(t *testing.T) {
+func TestWifi_SavedNetworksOutOfRangeAreNotListed(t *testing.T) {
 	f := fake.SeedArchLaptop()
 	p := newPump(t, New(f))
 	view := p.view()
 
-	separator := strings.Index(view, "─ out of range ─")
-	if separator < 0 {
-		t.Fatalf("saved networks with no scanned AP need an out-of-range section, got:\n%s", view)
-	}
-	summer := strings.Index(view, "Summer House")
-	if summer < 0 {
-		t.Fatalf("the out-of-range saved network should be listed, got:\n%s", view)
-	}
-	if summer < separator {
-		t.Errorf("Summer House should render below the separator, got:\n%s", view)
-	}
-	if row := lineContaining(t, view, "Summer House"); strings.Contains(row, "%") {
-		t.Errorf("an out-of-range network has no signal to show, got: %s", row)
-	}
-	// \x1b[2m — the whole section is faint: it's context, not actionable.
-	for _, marker := range []string{"out of range", "Summer House"} {
-		if row := lineContaining(t, view, marker); !strings.Contains(row, "\x1b[2m") {
-			t.Errorf("the out-of-range section should render greyed out, got: %s", row)
-		}
+	if strings.Contains(view, "out of range") || strings.Contains(view, "Summer House") {
+		t.Errorf("the scan list shows only visible networks, got:\n%s", view)
 	}
 }
 

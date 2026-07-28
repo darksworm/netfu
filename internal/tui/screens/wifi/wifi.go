@@ -734,13 +734,7 @@ func (m Model) list() domain.WifiList {
 			inRange = append(inRange, ap)
 		}
 	}
-	var outOfRange []string
-	for _, ssid := range list.OutOfRange {
-		if strings.Contains(strings.ToLower(ssid), query) {
-			outOfRange = append(outOfRange, ssid)
-		}
-	}
-	return domain.WifiList{InRange: inRange, OutOfRange: outOfRange}
+	return domain.WifiList{InRange: inRange}
 }
 
 func (m Model) View() string {
@@ -767,19 +761,6 @@ func (m Model) View() string {
 			row = style.SelectedRow(row, m.width)
 		}
 		lines = append(lines, row)
-	}
-	if len(list.OutOfRange) > 0 {
-		section := []string{style.Faint.Render("─ out of range ─")}
-		for _, ssid := range list.OutOfRange {
-			section = append(section, style.Faint.Render(fmt.Sprintf("  %-24s ⋆ saved", ssid)))
-		}
-		// Bottom-align the section in the pane; at least one blank line
-		// keeps it separated when the pane is crowded.
-		for len(lines)+len(section)+1 < m.height {
-			lines = append(lines, "")
-		}
-		lines = append(lines, "")
-		lines = append(lines, section...)
 	}
 	if len(lines) == 0 {
 		return ""
