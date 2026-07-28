@@ -2,7 +2,7 @@
 
 A vim-friendly TUI replacement for nmtui. Full NetworkManager control — live
 wifi scanning, devices, connection editing, hostname, VPN activation — one
-tab per physical interface plus Virtual, Other and System. Talks to
+tab per physical interface plus Virtual, Other, Auto and System. Talks to
 NetworkManager over D-Bus; no nmcli.
 
 ## Build
@@ -17,8 +17,8 @@ go build ./cmd/netfu
 ## Tabs
 
 The first tabs are the machine's physical interfaces (wifi first, then
-ethernet, labeled by interface name); Virtual, Other and System always
-close the bar. Device hotplug re-derives the tabs live.
+ethernet, labeled by interface name); Virtual, Other, Auto and System
+always close the bar. Device hotplug re-derives the tabs live.
 
 1. **Wifi device** (e.g. `wlan0`) — the home tab: live scan list (deduped
    per SSID, signal-sorted), join with password modal, wrong-password
@@ -35,7 +35,11 @@ close the bar. Device hotplug re-derives the tabs live.
    interface no current device has); typed editor for the fields you
    actually change, untouched settings preserved verbatim; VPN
    activate/deactivate lives here (D-Bus cannot create VPN profiles).
-5. **System** — hostname, wifi radio, NetworkManager state.
+5. **Auto** — the autoconnect pick order (priority desc, then most
+   recently used, sectioned per device type) without thinking in numbers:
+   `J`/`K` reorder, `space` toggles autoconnect, `s` writes spaced
+   priorities back — only to profiles that actually changed.
+6. **System** — hostname, wifi radio, NetworkManager state.
 
 ## Key bindings
 
@@ -53,7 +57,8 @@ close the bar. Device hotplug re-derives the tabs live.
 Per tab: Wifi `c` join hidden, `d` disconnect, `e` edit, `x` forget ·
 Ethernet `a`/`↵` activate, `d` deactivate, `e` edit, `x` delete, `n` new ·
 Virtual `i` detail, `a`/`d` · Other `e`/`↵` edit, `n` new, `x` delete,
-`a`/`d` · System `i`/`↵` edit field, `space` toggle.
+`a`/`d` · Auto `J`/`K` reorder, `space` toggle, `s` save · System `i`/`↵`
+edit field, `space` toggle.
 
 Editor: `j`/`k` fields, `↵`/`i` edit field, `space` cycle, `s` save,
 `esc`/`q` back.

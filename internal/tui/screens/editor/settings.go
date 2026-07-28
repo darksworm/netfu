@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"net/netip"
+	"strconv"
 	"strings"
 
 	"github.com/ilmars/netfu/internal/domain"
@@ -19,6 +20,24 @@ func validateCIDR(value string) error {
 		return errors.New("not an ip/prefix, e.g. 192.168.1.10/24")
 	}
 	return nil
+}
+
+// validatePriority accepts NM's connection.autoconnect-priority range.
+func validatePriority(value string) error {
+	n, err := strconv.Atoi(value)
+	if err != nil || n < -999 || n > 999 {
+		return errors.New("an integer between -999 and 999")
+	}
+	return nil
+}
+
+// intStr renders an integer setting for a text field, tolerating the
+// shapes a dbus round-trip produces; missing means NM's default 0.
+func intStr(settings domain.ConnectionSettings, section, key string) string {
+	if n, ok := toInt(settings[section][key]); ok {
+		return strconv.Itoa(n)
+	}
+	return "0"
 }
 
 // str reads a string setting, tolerating a missing section or key.
@@ -94,6 +113,8 @@ func toInt(v any) (int, bool) {
 	switch n := v.(type) {
 	case int:
 		return n, true
+	case int32:
+		return int(n), true
 	case int64:
 		return int(n), true
 	case uint32:

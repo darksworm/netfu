@@ -49,7 +49,7 @@ func TestSystem_StaysPureSettingsWithoutAnActiveConnectionsSection(t *testing.T)
 	f.ConnectionList = append(f.ConnectionList, domain.Connection{ID: "work-vpn", Name: "Work VPN", Type: "vpn"})
 	p := newPump(t, New(f))
 
-	p.send(keyPress('5'))
+	p.send(keyPress('6'))
 	view := p.view()
 	if strings.Contains(view, "Active connections") {
 		t.Errorf("connection activation lives on Other now; System should drop the section, got:\n%s", view)
@@ -68,7 +68,7 @@ func TestHostname_ShowsCurrentAndSavesNewName(t *testing.T) {
 	f := fake.SeedArchLaptop()
 	p := newPump(t, New(f))
 
-	p.send(keyPress('5'))
+	p.send(keyPress('6'))
 	if view := p.view(); !strings.Contains(view, "archbook") {
 		t.Fatalf("System tab should show the current hostname, got:\n%s", view)
 	}
@@ -97,7 +97,7 @@ func TestHostname_ScreenGreyedOutWhenPolkitDenies(t *testing.T) {
 	f.Perms = domain.Permissions{"org.freedesktop.NetworkManager.settings.modify.hostname": false}
 	p := newPump(t, New(f))
 
-	p.send(keyPress('5'))
+	p.send(keyPress('6'))
 	if view := p.view(); !strings.Contains(view, "🔒") {
 		t.Errorf("the hostname field should render locked when polkit denies, got:\n%s", view)
 	}

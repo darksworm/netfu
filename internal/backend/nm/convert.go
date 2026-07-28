@@ -116,6 +116,22 @@ func settingsFromNM(in gonm.ConnectionSettings) domain.ConnectionSettings {
 	return out
 }
 
+// connectionFromSettings maps a profile's identity plus NM's
+// connection.timestamp — seconds since epoch of the last successful
+// activation, absent for never-used profiles.
+func connectionFromSettings(settings gonm.ConnectionSettings) domain.Connection {
+	lastUsed := int64(0)
+	if ts, ok := settings["connection"]["timestamp"].(uint64); ok {
+		lastUsed = int64(ts)
+	}
+	return domain.Connection{
+		ID:           stringSetting(settings, "connection", "uuid"),
+		Name:         stringSetting(settings, "connection", "id"),
+		Type:         stringSetting(settings, "connection", "type"),
+		LastUsedUnix: lastUsed,
+	}
+}
+
 // settingsToNM converts domain settings back to what NM's Update/AddConnection
 // expect. Two coercions matter: the SSID goes back to bytes, and homogeneous
 // []any arrays (produced by GetSettings' variant decoding) are rebuilt with

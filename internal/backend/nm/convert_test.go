@@ -257,3 +257,28 @@ func TestNMStateFromNM_CollapsesConnectedTiersAndTransitions(t *testing.T) {
 		}
 	}
 }
+
+func TestConnectionFromSettings_ReadsIdentityAndLastUsedTimestamp(t *testing.T) {
+	c := connectionFromSettings(gonm.ConnectionSettings{
+		"connection": {
+			"uuid": "our-house-1", "id": "Our House 1", "type": "802-11-wireless",
+			"timestamp": uint64(1751328000),
+		},
+	})
+	want := domain.Connection{
+		ID: "our-house-1", Name: "Our House 1", Type: "802-11-wireless",
+		LastUsedUnix: 1751328000,
+	}
+	if c != want {
+		t.Errorf("connectionFromSettings = %+v, want %+v", c, want)
+	}
+}
+
+func TestConnectionFromSettings_TreatsAMissingTimestampAsNeverUsed(t *testing.T) {
+	c := connectionFromSettings(gonm.ConnectionSettings{
+		"connection": {"uuid": "u", "id": "n", "type": "vpn"},
+	})
+	if c.LastUsedUnix != 0 {
+		t.Errorf("missing connection.timestamp should mean never used, got %d", c.LastUsedUnix)
+	}
+}

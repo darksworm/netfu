@@ -304,14 +304,64 @@ func TestEditor_EditingAutoconnectAndNameWritesBackViaUpdateSettings(t *testing.
 	}
 }
 
+func TestEditor_PriorityFieldLoadsValidatesRangeAndWritesBack(t *testing.T) {
+	f := seedStaticWifiProfile()
+	f.SettingsByID["our-house-1"]["connection"]["autoconnect-priority"] = int32(10)
+	p := newPump(t, New(f))
+
+	p.send(keyPress('e'))
+	if priority := lineContaining(t, p.view(), "Priority"); !strings.Contains(priority, "10") {
+		t.Errorf("Priority should load from connection.autoconnect-priority, got: %q", priority)
+	}
+
+	// Down to Priority (Name, Autoconnect, Priority) and type an
+	// out-of-range value.
+	p.send(keyPress('j'))
+	p.send(keyPress('j'))
+	p.send(keyPress('i'))
+	for range len("10") {
+		p.send(tea.KeyPressMsg{Code: tea.KeyBackspace})
+	}
+	typeText(p, "1200")
+	p.send(tea.KeyPressMsg{Code: tea.KeyEnter})
+	p.send(keyPress('s'))
+
+	if len(f.UpdateCalls) != 0 {
+		t.Errorf("a priority outside -999..999 must block the save, got calls: %#v", f.UpdateCalls)
+	}
+	if priority := lineContaining(t, p.view(), "Priority"); !strings.Contains(priority, "✗") {
+		t.Errorf("the invalid field should carry an inline error, got: %q", priority)
+	}
+
+	p.send(keyPress('i'))
+	for range len("1200") {
+		p.send(tea.KeyPressMsg{Code: tea.KeyBackspace})
+	}
+	typeText(p, "-50")
+	p.send(tea.KeyPressMsg{Code: tea.KeyEnter})
+	p.send(keyPress('s'))
+
+	if len(f.UpdateCalls) != 1 {
+		t.Fatalf("a valid priority should save via UpdateSettings once, got %d calls", len(f.UpdateCalls))
+	}
+	call := f.UpdateCalls[0]
+	if got := call.Settings["connection"]["autoconnect-priority"]; got != -50 {
+		t.Errorf("the edited priority should write back as an integer, got %#v", got)
+	}
+	if got := call.Settings["proxy"]["browser-only"]; got != false {
+		t.Errorf("untouched settings sections must pass through verbatim, got %#v", call.Settings)
+	}
+}
+
 func TestEditor_InvalidIPv4StaticAddressBlocksSaveWithFieldError(t *testing.T) {
 	f := seedStaticWifiProfile()
 	p := newPump(t, New(f))
 
 	p.send(keyPress('e'))
 
-	// Down to the Address field: Name, Autoconnect, SSID, Security, Method.
-	for range 5 {
+	// Down to the Address field: Name, Autoconnect, Priority, SSID,
+	// Security, Method.
+	for range 6 {
 		p.send(keyPress('j'))
 	}
 	p.send(keyPress('i'))

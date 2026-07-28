@@ -5,6 +5,7 @@ package editor
 
 import (
 	"fmt"
+	"strconv"
 	"strings"
 
 	tea "charm.land/bubbletea/v2"
@@ -178,6 +179,8 @@ func (m Model) sections() []editorform.Section {
 				Value: str(m.settings, "connection", "id")},
 			{Key: "connection.autoconnect", Label: "Autoconnect", Kind: editorform.Toggle,
 				On: boolOr(m.settings, "connection", "autoconnect", true)},
+			{Key: "connection.autoconnect-priority", Label: "Priority", Kind: editorform.Text,
+				Value: intStr(m.settings, "connection", "autoconnect-priority"), Validate: validatePriority},
 		},
 	}}
 	if str(m.settings, "connection", "type") == "802-11-wireless" {
@@ -242,6 +245,11 @@ func (m Model) updatedSettings() domain.ConnectionSettings {
 	if m.form.Touched("connection.autoconnect") {
 		f, _ := m.form.Get("connection.autoconnect")
 		set("connection", "autoconnect", f.On)
+	}
+	if m.form.Touched("connection.autoconnect-priority") {
+		f, _ := m.form.Get("connection.autoconnect-priority")
+		priority, _ := strconv.Atoi(f.Value)
+		set("connection", "autoconnect-priority", priority)
 	}
 	if m.form.Touched("802-11-wireless.ssid") {
 		f, _ := m.form.Get("802-11-wireless.ssid")

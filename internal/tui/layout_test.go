@@ -86,6 +86,16 @@ func TestLayout_EthernetTabWithProfiles(t *testing.T) {
 	requireGolden(t, "ethernet_profiles_80x24", p.view())
 }
 
+func TestLayout_AutoTab(t *testing.T) {
+	f := fake.SeedAutoconnectPriorities()
+	p := newPump(t, New(f))
+
+	p.send(tea.WindowSizeMsg{Width: 80, Height: 24})
+	p.send(keyPress('5'))
+
+	requireGolden(t, "auto_80x24", p.view())
+}
+
 func TestLayout_VirtualTab(t *testing.T) {
 	f := fake.SeedArchLaptop()
 	p := newPump(t, New(f))

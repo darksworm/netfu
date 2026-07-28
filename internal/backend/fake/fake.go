@@ -4,6 +4,7 @@ package fake
 import (
 	"fmt"
 	"sync"
+	"time"
 
 	"github.com/ilmars/netfu/internal/backend"
 	"github.com/ilmars/netfu/internal/domain"
@@ -100,6 +101,20 @@ func SeedArchLaptop() *Fake {
 		{SSID: "", Strength: 33, BSSID: "AA:BB:CC:66:66:66", Security: domain.SecurityWPA2},
 	}
 	f.HostnameValue = "archbook"
+	return f
+}
+
+// SeedAutoconnectPriorities extends the arch laptop with explicit
+// autoconnect data: one wifi profile pinned high, the rest on the default
+// priority split by last use, and the bridge opted out of autoconnect.
+func SeedAutoconnectPriorities() *Fake {
+	f := SeedArchLaptop()
+	f.ConnectionList[0].LastUsedUnix = time.Date(2026, 7, 1, 0, 0, 0, 0, time.UTC).Unix()  // Our House 1
+	f.ConnectionList[2].LastUsedUnix = time.Date(2026, 6, 30, 0, 0, 0, 0, time.UTC).Unix() // Summer House
+	f.SettingsByID["our-house-5g"]["connection"]["autoconnect-priority"] = int32(10)
+	f.SettingsByID["docker0"] = domain.ConnectionSettings{
+		"connection": {"id": "docker0", "uuid": "docker0", "type": "bridge", "autoconnect": false},
+	}
 	return f
 }
 
@@ -280,7 +295,12 @@ func (f *Fake) UpdateSettings(connectionID string, settings domain.ConnectionSet
 	defer f.mu.Unlock()
 
 	f.UpdateCalls = append(f.UpdateCalls, UpdateCall{ConnectionID: connectionID, Settings: settings})
-	return f.record("UpdateSettings")
+	if err := f.record("UpdateSettings"); err != nil {
+		return err
+	}
+	// NM applies the update, so reloads see the written settings.
+	f.SettingsByID[connectionID] = settings
+	return nil
 }
 
 func (f *Fake) AddConnection(settings domain.ConnectionSettings) error {

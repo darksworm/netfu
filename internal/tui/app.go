@@ -16,6 +16,7 @@ import (
 	"github.com/ilmars/netfu/internal/domain"
 	"github.com/ilmars/netfu/internal/tui/components/statusbar"
 	"github.com/ilmars/netfu/internal/tui/keys"
+	"github.com/ilmars/netfu/internal/tui/screens/auto"
 	"github.com/ilmars/netfu/internal/tui/screens/connections"
 	"github.com/ilmars/netfu/internal/tui/screens/devices"
 	"github.com/ilmars/netfu/internal/tui/screens/ethernet"
@@ -31,11 +32,12 @@ const (
 	tabKindEthernet
 	tabKindVirtual
 	tabKindOther
+	tabKindAuto
 	tabKindSystem
 )
 
 // tabEntry identifies one tab: physical devices get their own tab labeled by
-// interface name; Virtual, Other and System always close the bar.
+// interface name; Virtual, Other, Auto and System always close the bar.
 type tabEntry struct {
 	kind   tabKind
 	device string
@@ -47,6 +49,8 @@ func (t tabEntry) label() string {
 		return "Virtual"
 	case tabKindOther:
 		return "Other"
+	case tabKindAuto:
+		return "Auto"
 	case tabKindSystem:
 		return "System"
 	}
@@ -74,7 +78,8 @@ func deriveTabs(all []domain.Device) []tabEntry {
 			tabs = append(tabs, tabEntry{kind: kind, device: name})
 		}
 	}
-	return append(tabs, tabEntry{kind: tabKindVirtual}, tabEntry{kind: tabKindOther}, tabEntry{kind: tabKindSystem})
+	return append(tabs, tabEntry{kind: tabKindVirtual}, tabEntry{kind: tabKindOther},
+		tabEntry{kind: tabKindAuto}, tabEntry{kind: tabKindSystem})
 }
 
 type App struct {
@@ -88,6 +93,7 @@ type App struct {
 	eth      map[string]ethernet.Model
 	devices  devices.Model
 	conns    connections.Model
+	auto     auto.Model
 	system   system.Model
 	help     help.Model
 	showHelp bool
@@ -109,6 +115,7 @@ func New(b backend.Backend) tea.Model {
 		eth:     map[string]ethernet.Model{},
 		devices: devices.New(b),
 		conns:   connections.New(b),
+		auto:    auto.New(b),
 		system:  system.New(b),
 		help:    help.New(),
 		status:  statusbar.New(),
@@ -213,15 +220,16 @@ func (a App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// Screens get the box interior: borders plus one cell of padding
 		// on each side.
 		content := tea.WindowSizeMsg{Width: max(msg.Width-4, 0), Height: max(msg.Height-chromeLines, 0)}
-		var wifiCmd, devicesCmd, connsCmd, systemCmd tea.Cmd
+		var wifiCmd, devicesCmd, connsCmd, autoCmd, systemCmd tea.Cmd
 		a.wifi, wifiCmd = a.wifi.Update(content)
 		a.devices, devicesCmd = a.devices.Update(content)
 		a.conns, connsCmd = a.conns.Update(content)
+		a.auto, autoCmd = a.auto.Update(content)
 		a.system, systemCmd = a.system.Update(content)
 		for name, e := range a.eth {
 			a.eth[name], _ = e.Update(content)
 		}
-		return a, tea.Batch(wifiCmd, devicesCmd, connsCmd, systemCmd)
+		return a, tea.Batch(wifiCmd, devicesCmd, connsCmd, autoCmd, systemCmd)
 	case tea.BackgroundColorMsg:
 		a.theme = style.NewTheme(msg.IsDark())
 		style.ResolveSelected(msg.IsDark())
@@ -260,6 +268,7 @@ func (a App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		a.perms = msg.perms
 		a.wifi = a.wifi.SetPermissions(msg.perms)
 		a.conns = a.conns.SetPermissions(msg.perms)
+		a.auto = a.auto.SetPermissions(msg.perms)
 		a.system = a.system.WithPermissions(msg.perms)
 		for name, e := range a.eth {
 			a.eth[name] = e.SetPermissions(msg.perms)
@@ -282,6 +291,7 @@ func (a App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			loadTabs(a.backend),
 			a.devices.Init(),
 			a.conns.Init(),
+			a.auto.Init(),
 			a.system.Init(),
 			cmd,
 		}
@@ -308,6 +318,9 @@ func (a App) handleKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	if tab.kind == tabKindOther && a.conns.CapturesInput() {
 		return a.updateActiveScreen(msg)
 	}
+	if tab.kind == tabKindAuto && a.auto.CapturesInput() {
+		return a.updateActiveScreen(msg)
+	}
 	if tab.kind == tabKindSystem && a.system.CapturesInput() {
 		return a.updateActiveScreen(msg)
 	}
@@ -318,8 +331,12 @@ func (a App) handleKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		a.help.ShowAll = a.showHelp
 		return a, nil
 	case key.Matches(msg, a.keys.Quit):
-		// q pops a pushed layer and only quits from top level.
+		// q pops a pushed layer and only quits from top level; a pending
+		// autoconnect reorder gets the save/discard prompt first.
 		if tab.kind == tabKindVirtual && a.devices.Layered() {
+			return a.updateActiveScreen(msg)
+		}
+		if tab.kind == tabKindAuto && a.auto.Dirty() {
 			return a.updateActiveScreen(msg)
 		}
 		return a, tea.Quit
@@ -362,6 +379,8 @@ func (a App) switchTab(i int) (tea.Model, tea.Cmd) {
 		return a, a.devices.Init()
 	case tabKindOther:
 		return a, a.conns.Init()
+	case tabKindAuto:
+		return a, a.auto.Init()
 	case tabKindSystem:
 		return a, a.system.Init()
 	}
@@ -382,6 +401,9 @@ func (a App) updateActiveScreen(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case tabKindOther:
 		a.conns, cmd = a.conns.Update(msg)
 		a.status = a.status.SetMessage(a.conns.Status())
+	case tabKindAuto:
+		a.auto, cmd = a.auto.Update(msg)
+		a.status = a.status.SetMessage(a.auto.Status())
 	case tabKindSystem:
 		a.system, cmd = a.system.Update(msg)
 	}
@@ -487,6 +509,8 @@ func (a App) activeScreenView() string {
 		return a.devices.View()
 	case tabKindOther:
 		return a.conns.View()
+	case tabKindAuto:
+		return a.auto.View()
 	case tabKindSystem:
 		return a.system.View()
 	}
@@ -503,6 +527,8 @@ func (a App) activeScreenKeys() help.KeyMap {
 		return a.devices.Keys()
 	case tabKindOther:
 		return a.conns.Keys()
+	case tabKindAuto:
+		return a.auto.Keys()
 	case tabKindSystem:
 		return a.system.Keys()
 	}
@@ -531,8 +557,15 @@ func (a App) tabBarView() string {
 		parts[i] = entry
 	}
 	bar := strings.Join(parts, " · ")
+	// A crowded bar keeps the spinner and drops the word instead of
+	// clipping it mid-letter.
 	if a.wifi.Scanning() {
-		bar += "   " + style.Faint.Render("scan ⟳")
+		for _, indicator := range []string{"   scan ⟳", "  ⟳"} {
+			if a.width <= 0 || lipgloss.Width(bar+indicator) <= a.width {
+				bar += style.Faint.Render(indicator)
+				break
+			}
+		}
 	}
 	return a.clipToWidth(bar) + "\n"
 }

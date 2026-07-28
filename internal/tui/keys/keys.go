@@ -186,6 +186,47 @@ func (e Ethernet) FullHelp() [][]key.Binding {
 		[]key.Binding{e.Activate, e.Deactivate, e.Edit, e.Delete, e.New})
 }
 
+// Auto is the Auto tab keymap: list navigation plus reordering the
+// autoconnect pick order.
+type Auto struct {
+	List
+	MoveDown key.Binding
+	MoveUp   key.Binding
+	Toggle   key.Binding
+	Save     key.Binding
+}
+
+func DefaultAuto() Auto {
+	return Auto{
+		List: DefaultList(),
+		MoveDown: key.NewBinding(
+			key.WithKeys("J"),
+			key.WithHelp("J/K", "reorder"),
+		),
+		MoveUp: key.NewBinding(
+			key.WithKeys("K"),
+			key.WithHelp("K", "move up"),
+		),
+		Toggle: key.NewBinding(
+			key.WithKeys("space"),
+			key.WithHelp("space", "toggle"),
+		),
+		Save: key.NewBinding(
+			key.WithKeys("s"),
+			key.WithHelp("s", "save"),
+		),
+	}
+}
+
+// ShortHelp is the footer: MoveDown's help text teaches both reorder keys.
+func (a Auto) ShortHelp() []key.Binding {
+	return []key.Binding{a.MoveDown, a.Toggle, a.Save}
+}
+
+func (a Auto) FullHelp() [][]key.Binding {
+	return append(a.List.FullHelp(), []key.Binding{a.MoveDown, a.MoveUp, a.Toggle, a.Save})
+}
+
 // System is the System tab keymap: list navigation over the settings
 // fields plus their contextual actions.
 type System struct {

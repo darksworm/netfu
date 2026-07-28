@@ -29,7 +29,7 @@ func TestApp_TabBarListsPhysicalDevicesThenVirtualOtherSystem(t *testing.T) {
 	p := newPump(t, New(f))
 
 	view := p.view()
-	for _, entry := range []string{"[1] wlan0", "[2] enp0s31f6", "[3] Virtual", "[4] Other", "[5] System"} {
+	for _, entry := range []string{"[1] wlan0", "[2] enp0s31f6", "[3] Virtual", "[4] Other", "[5] Auto", "[6] System"} {
 		if !strings.Contains(view, entry) {
 			t.Errorf("the tab bar should show %q, got:\n%s", entry, view)
 		}
@@ -85,8 +85,13 @@ func TestApp_NumberKeysAndBracketsSwitchTabs(t *testing.T) {
 	}
 
 	p.send(keyPress(']'))
-	if got := p.app().currentTab(); got.kind != tabKindSystem {
+	if got := p.app().currentTab(); got.kind != tabKindAuto {
 		t.Errorf("] should move to the next tab, got %+v", got)
+	}
+
+	p.send(keyPress(']'))
+	if got := p.app().currentTab(); got.kind != tabKindSystem {
+		t.Errorf("] should move on to System, got %+v", got)
 	}
 
 	p.send(keyPress(']'))
@@ -132,13 +137,13 @@ func TestApp_VirtualTabHidesPhysicalDevicesAndP2PNoise(t *testing.T) {
 func TestApp_DeviceChurnRedrivesTabsKeepingPhysicalOrderStable(t *testing.T) {
 	f := fake.SeedArchLaptop()
 	p := newPump(t, New(f))
-	p.send(keyPress('5'))
+	p.send(keyPress('6'))
 	if got := p.app().currentTab(); got.kind != tabKindSystem {
-		t.Fatalf("precondition: tab 5 should be System, got %+v", got)
+		t.Fatalf("precondition: tab 6 should be System, got %+v", got)
 	}
 
 	// A USB NIC appears: it gets its own tab after the built-in one, and
-	// System shifts to slot 6 with the user still on it.
+	// System shifts to slot 7 with the user still on it.
 	f.DeviceList = append(f.DeviceList, domain.Device{
 		Name: "enp5s0u1", Type: domain.DeviceTypeEthernet, State: domain.DeviceStateDisconnected, Managed: true,
 	})
@@ -146,7 +151,7 @@ func TestApp_DeviceChurnRedrivesTabsKeepingPhysicalOrderStable(t *testing.T) {
 	p.deliverNext()
 
 	view := p.view()
-	for _, entry := range []string{"[1] wlan0", "[2] enp0s31f6", "[3] enp5s0u1", "[4] Virtual", "[5] Other", "[6] System"} {
+	for _, entry := range []string{"[1] wlan0", "[2] enp0s31f6", "[3] enp5s0u1", "[4] Virtual", "[5] Other", "[6] Auto", "[7] System"} {
 		if !strings.Contains(view, entry) {
 			t.Errorf("after hotplug the tab bar should show %q, got:\n%s", entry, view)
 		}
@@ -247,6 +252,13 @@ func TestApp_FooterTeachesEachTabsCoreActions(t *testing.T) {
 	for _, want := range []string{"activate", "edit", "delete", "new"} {
 		if !strings.Contains(footer(), want) {
 			t.Errorf("the Other footer should teach %q, got: %s", want, footer())
+		}
+	}
+
+	p.send(keyPress('5')) // Auto
+	for _, want := range []string{"J/K", "reorder", "toggle", "save"} {
+		if !strings.Contains(footer(), want) {
+			t.Errorf("the Auto footer should teach %q, got: %s", want, footer())
 		}
 	}
 }

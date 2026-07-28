@@ -143,11 +143,7 @@ func (a *Adapter) Connections() ([]domain.Connection, error) {
 		if err != nil {
 			return nil, err
 		}
-		connections = append(connections, domain.Connection{
-			ID:   stringSetting(settings, "connection", "uuid"),
-			Name: stringSetting(settings, "connection", "id"),
-			Type: stringSetting(settings, "connection", "type"),
-		})
+		connections = append(connections, connectionFromSettings(settings))
 	}
 	return connections, nil
 }
